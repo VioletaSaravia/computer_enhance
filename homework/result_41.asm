@@ -63,7 +63,7 @@ cmp [BP + SI + 4], BH
 cmp [BP + DI + 6], DI
 cmp [BX], 34
 cmp [BP], -30
-add BL, [DI]
+adc BL, [DI]
 cmp AX, [BP]
 cmp AL, [BX + SI]
 cmp AX, BX

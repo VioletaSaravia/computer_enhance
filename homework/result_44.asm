@@ -1,0 +1,12 @@
+mov AX, 1
+mov BX, 2
+mov CX, 3
+mov DX, 4
+mov SP, AX
+mov BP, BX
+mov SI, CX
+mov DI, DX
+mov DX, SP
+mov CX, BP
+mov BX, SI
+mov AX, DI
