@@ -1,0 +1,12 @@
+mov ax, 1	; Flags = 0b00000000
+mov bx, 2	; Flags = 0b00000000
+mov cx, 3	; Flags = 0b00000000
+mov dx, 4	; Flags = 0b00000000
+mov sp, ax	; Flags = 0b00000000
+mov bp, bx	; Flags = 0b00000000
+mov si, cx	; Flags = 0b00000000
+mov di, dx	; Flags = 0b00000000
+mov dx, sp	; Flags = 0b00000000
+mov cx, bp	; Flags = 0b00000000
+mov bx, si	; Flags = 0b00000000
+mov ax, di	; Flags = 0b00000000

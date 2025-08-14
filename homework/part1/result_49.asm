@@ -1,0 +1,11 @@
+mov cx, 3		; Flags = 0b00000000
+mov bx, 1000		; Flags = 0b00000000
+add bx, 10		; Flags = 0b00000001
+sub cx, 1		; Flags = 0b00000000
+jnz $-8			; Flags = 0b00000000
+add bx, 10		; Flags = 0b00000001
+sub cx, 1		; Flags = 0b00000000
+jnz $-8			; Flags = 0b00000000
+add bx, 10		; Flags = 0b00000001
+sub cx, 1		; Flags = 0b01000000
+jnz $-8			; Flags = 0b01000000

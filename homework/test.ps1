@@ -1,1 +1,0 @@
-fc.exe /b .\homework\result_39 .\perfaware\part1\listing_0039_more_movs

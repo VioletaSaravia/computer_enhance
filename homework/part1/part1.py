@@ -1,11 +1,13 @@
 import glob
 import sys
+from time import sleep
 from typing import Annotated, List
 import numpy as np
 from dataclasses import dataclass
 
 listing = "39" if len(sys.argv) < 2 else sys.argv[1]
-test_print = len(sys.argv) > 2 and sys.argv[2] == "print"
+
+extra: str = "" if len(sys.argv) < 3 else sys.argv[2]
 
 binaries = [
     file
@@ -13,7 +15,9 @@ binaries = [
     if file.find(".") == -1 and file.find(listing) != -1
 ]
 
-out = open(f"homework/result_{listing}.asm", "wb")
+out = open(f"homework/part1/result_{listing}.asm", "wb")
+with open(binaries[0], "rb") as f:
+    binary = f.read()
 
 
 def printb(*args):
@@ -25,12 +29,8 @@ def printb(*args):
 
 def finished():
     out.close()
-    print("\n", regs)
+    print("", regs)
     exit()
-
-
-with open(binaries[0], "rb") as f:
-    binary = f.read()
 
 
 def bits(char: int) -> Annotated[List[np.uint8], (8)]:
@@ -55,8 +55,6 @@ def get_byte():
         finished()
 
     result = binary[current_byte]
-    if test_print:
-        printb(f"/{result:08b}/ ")
     current_byte += 1
     return result
 
@@ -180,6 +178,26 @@ class Registers:
     zf = False  # zero flag
     pf = False  # parity flag
     of = False  # overflow flag
+    tf = False
+    ifl = False
+    df = False
+
+    def _get_flags(self) -> np.uint16:
+        result = np.uint16(0)
+
+        result |= np.uint16((1 if self.cf else 0) << 0)
+        result |= np.uint16((1 if self.pf else 0) << 2)
+        result |= np.uint16((1 if self.af else 0) << 4)
+        result |= np.uint16((1 if self.zf else 0) << 6)
+        result |= np.uint16((1 if self.sf else 0) << 7)
+        result |= np.uint16((1 if self.tf else 0) << 8)
+        result |= np.uint16((1 if self.ifl else 0) << 9)
+        result |= np.uint16((1 if self.df else 0) << 10)
+        result |= np.uint16((1 if self.of else 0) << 11)
+
+        return result
+
+    flags = property(fget=_get_flags)
 
     def __repr__(self) -> str:
         return f"""
@@ -201,6 +219,9 @@ Flags(
     ZF = { "set" if self.zf else "unset" }
     PF = { "set" if self.pf else "unset" }
     OF = { "set" if self.of else "unset" }
+    TF = { "set" if self.tf else "unset" }
+    IF = { "set" if self.ifl else "unset" }
+    DF = { "set" if self.df else "unset" }
 )
 """
 
@@ -215,33 +236,33 @@ Flags(
         self.ah = np.uint8(0)
         self.al = np.uint8(0)
 
-    ax = property(fget=_get_ax, fset=_set_ax, fdel=_del_ax, doc="")
+    ax = property(fget=_get_ax, fset=_set_ax, fdel=_del_ax)
 
     def _get_bx(self) -> np.uint16:
         return np.uint16(np.uint16(self.bl) << 8) | np.uint16(self.bh)
 
-    def _set_bx(self, vbl: np.uint16):
-        self.bh = np.uint8(vbl % 256)
-        self.bl = np.uint8((vbl >> 8) % 256)
+    def _set_bx(self, val: np.uint16):
+        self.bh = np.uint8(val % 256)
+        self.bl = np.uint8((val >> 8) % 256)
 
     def _del_bx(self):
         self.bh = np.uint8(0)
         self.bl = np.uint8(0)
 
-    bx = property(fget=_get_bx, fset=_set_bx, fdel=_del_bx, doc="")
+    bx = property(fget=_get_bx, fset=_set_bx, fdel=_del_bx)
 
     def _get_cx(self) -> np.uint16:
         return np.uint16(np.uint16(self.cl) << 8) | np.uint16(self.ch)
 
-    def _set_cx(self, vcl: np.uint16):
-        self.ch = np.uint8(vcl % 256)
-        self.cl = np.uint8((vcl >> 8) % 256)
+    def _set_cx(self, val: np.uint16):
+        self.ch = np.uint8(val % 256)
+        self.cl = np.uint8((val >> 8) % 256)
 
     def _del_cx(self):
         self.ch = np.uint8(0)
         self.cl = np.uint8(0)
 
-    cx = property(fget=_get_cx, fset=_set_cx, fdel=_del_cx, doc="")
+    cx = property(fget=_get_cx, fset=_set_cx, fdel=_del_cx)
 
     def _get_dx(self) -> np.uint16:
         return np.uint16(np.uint16(self.dl) << 8) | np.uint16(self.dh)
@@ -254,11 +275,7 @@ Flags(
         self.dh = np.uint8(0)
         self.dl = np.uint8(0)
 
-    dx = property(fget=_get_dx, fset=_set_dx, fdel=_del_dx, doc="")
-
-
-# type Bit = np.bool
-# type Byte = Annotated[npt.NDArray[np.bool], (8)]
+    dx = property(fget=_get_dx, fset=_set_dx, fdel=_del_dx)
 
 
 def bits_to_byte(*args: int) -> int:
@@ -269,33 +286,50 @@ def bits_to_byte(*args: int) -> int:
 
 
 regs = Registers()
+mem = [np.uint8(0)] * 1024 * 1024
 while True:
     match bits(get_byte()):
         case [0, 1, 1, 1, j1, j2, j3, j4]:
-            jump_op = (j1 << 3) | (j2 << 2) | (j3 << 1) | j4
+            jump_op = bits_to_byte(j1, j2, j3, j4)
+
+            goto = np.int8(np.uint8(get_byte()))
 
             op = ""
             match jump_op:
                 case 0b0000:
                     op = "jo"
+                    if regs.of:
+                        current_byte += goto
                 case 0b0001:
                     op = "jno"
+                    if not regs.of:
+                        current_byte += goto
                 case 0b0010:
                     op = "jb"
                 case 0b0011:
                     op = "jnb"
                 case 0b0100:
+                    op = "je"
+                    if regs.zf:
+                        current_byte += goto
+                case 0b1100:
                     op = "jl"
                 case 0b0101:
-                    op = "jne"
+                    op = "jnz"
+                    if not regs.zf:
+                        current_byte += goto
                 case 0b0110:
                     op = "jbe"
                 case 0b0111:
                     op = "jnbe"
                 case 0b1000:
                     op = "js"
+                    if regs.sf:
+                        current_byte += goto
                 case 0b1001:
                     op = "jns"
+                    if not regs.sf:
+                        current_byte += goto
                 case 0b1010:
                     op = "jp"
                 case 0b1011:
@@ -307,10 +341,10 @@ while True:
                 case 0b1111:
                     op = "jnle"
 
-            printb(f"{op} 0x{get_byte():02X}")
+            printb(f"{op} ${goto}\t")
 
         case [1, 1, 1, 0, 0, 0, o1, o2]:
-            opcode = (o1 << 1) | o2
+            opcode = bits_to_byte(o1, o2)
 
             op = ""
             match opcode:
@@ -322,12 +356,13 @@ while True:
                     op = "loop"
                 case 0b11:
                     op = "jcxz"
+                    if regs.cx == 0:
+                        current_byte += goto
 
             printb(f"{op} 0x{get_byte():02X}")
 
         case [0, 0, a1, a2, a3, 1, 0, w]:
-            arithmetic = (a1 << 2) | (a2 << 1) | a3
-            # arithmetic = bits_to_byte(a1, a2, a3)
+            arithmetic = bits_to_byte(a1, a2, a3)
 
             imm = decode_imm_data(w)
             reg: str = "AX" if w == 1 else "AL"
@@ -339,20 +374,22 @@ while True:
             match op:
                 case "add":
                     exec(f"regs.{reg} += {imm}")
+                    exec(f"regs.cf = regs.{reg} < {imm}")
                 case "adc":
                     exec(f"regs.{reg} += {imm}")
+                    exec(f"regs.cf = regs.{reg} < {imm}")
                 case "sub":
+                    exec(f"regs.cf = {imm} > regs.{reg}")
                     exec(f"regs.{reg} -= {imm}")
                 case "cmp":
+                    exec(f"regs.cf = {imm} > regs.{reg}")
                     exec(f"cmp = regs.{reg} - {imm}")
-                    exec("")
+
             exec(f"regs.zf = regs.{reg} == 0")
-            printb(f" | ZF {"set" if regs.zf else "unset"}")
 
         case [1, 0, 0, 0, 0, 0, s, w]:
             byte = get_byte()
-            arithmetic = (byte & 0b00011100) >> 2
-
+            arithmetic = (byte & 0b00111000) >> 3
             op = decode_arithmetic_op(arithmetic)
 
             mod = byte >> 6
@@ -367,24 +404,22 @@ while True:
             match op:
                 case "add":
                     exec(f"regs.{reg02} += {reg01}")
-
                     exec(f"regs.cf = {reg01} < regs.{reg02}")
-                    printb(f" | CF {"set" if regs.cf else "unset"}")
                 case "adc":
                     exec(f"regs.{reg02} += {reg01}")
+                    exec(f"regs.cf = {reg01} < regs.{reg02}")
                 case "sub":
+                    exec(f"regs.cf = regs.{reg02} < {reg01}")
                     exec(f"regs.{reg02} -= {reg01}")
                 case "cmp":
                     exec(f"regs.cf = regs.{reg02} < {reg01}")
-                    printb(f" | CF {"set" if regs.cf else "unset"}")
 
                     exec(f"cmp = regs.{reg02} - {reg01}")
 
             exec(f"regs.zf = regs.{reg02} == 0")
-            printb(f" | ZF {"set" if regs.zf else "unset"}")
 
         case [0, 0, a1, a2, a3, 0, d, w]:
-            arithmetic = (a1 << 2) | (a2 << 1) | a3
+            arithmetic = bits_to_byte(a1, a2, a3)
 
             op = decode_arithmetic_op(arithmetic)
 
@@ -401,41 +436,47 @@ while True:
                 match op:
                     case "add":
                         exec(f"regs.{reg02} += regs.{reg01}")
-
                         exec(f"regs.cf = regs.{reg01} < regs.{reg02}")
-                        printb(f" | CF {"set" if regs.cf else "unset"}")
                     case "adc":
                         exec(f"regs.{reg02} += regs.{reg01}")
-                    case "sub":
                         exec(f"regs.cf = regs.{reg01} < regs.{reg02}")
-                        printb(f" | CF {"set" if regs.cf else "unset"}")
+                    case "sub":
+                        exec(f"regs.cf = regs.{reg01} > regs.{reg02}")
 
+                        exec(f"sign_before: bool = np.int16(regs.{reg02}) >= 0")
                         exec(f"regs.{reg02} -= regs.{reg01}")
+                        exec(f"sign_after: bool = np.int16(regs.{reg02}) >= 0")
+                        exec(f"regs.sf = sign_before != sign_after")
                     case "cmp":
-                        exec(f"regs.cf = regs.{reg02} < regs.{reg01}")
-                        printb(f" | CF {"set" if regs.cf else "unset"}")
-
+                        exec(f"regs.cf = regs.{reg02} > regs.{reg01}")
+                        exec(f"sign_before: bool = np.int16(regs.{reg02}) >= 0")
                         exec(f"cmp = regs.{reg02} - regs.{reg01}")
+                        exec(f"sign_after: bool = np.int16(cmp) >= 0")
+                        exec(f"regs.sf = sign_before != sign_after")
                 exec(f"regs.zf = regs.{reg02} == 0")
-                printb(f" | ZF {"set" if regs.zf else "unset"}")
             if d == 1:
                 printb(f"{op} {reg01}, {reg02}")
-                print(" EXECUTING")
                 match op:
                     case "add":
                         exec(f"regs.{reg01} += regs.{reg02}")
+                        exec(f"regs.cf = regs.{reg02} < regs.{reg01}")
                     case "adc":
                         exec(f"regs.{reg01} += regs.{reg02}")
+                        exec(f"regs.cf = regs.{reg02} < regs.{reg01}")
                     case "sub":
+                        exec(f"regs.cf = regs.{reg01} < regs.{reg02}")
+                        exec(f"sign_before: bool = np.int16(regs.{reg01}) >= 0")
                         exec(f"regs.{reg01} -= regs.{reg02}")
+                        exec(f"sign_after: bool = np.int16(regs.{reg01}) >= 0")
+                        exec(f"regs.sf = sign_before != sign_after")
                     case "cmp":
                         exec(f"regs.cf = regs.{reg01} < regs.{reg02}")
-                        printb(f" | CF {"set" if regs.cf else "unset"}")
-
                         exec(f"cmp = regs.{reg01} - regs.{reg02}")
+                        exec(f"sign_before: bool = np.int16(regs.{reg01}) >= 0")
+                        exec(f"sign_after: bool = np.int16(cmp) >= 0")
+                        exec(f"regs.sf = sign_before != sign_after")
 
                 exec(f"regs.zf = regs.{reg01} == 0")
-                printb(f" | ZF {"set" if regs.zf else "unset"}")
 
         case [1, 0, 0, 0, 1, 0, d, w]:
             printb("mov ")
@@ -450,21 +491,13 @@ while True:
 
             if d == 0:
                 printb(f"{reg02}, {reg01}")
-                try:
-                    exec(f"regs.{reg02} = regs.{reg01}")
-                except:
-                    print(" [Evaluation failed]")
-                    continue
+                exec(f"regs.{reg02} = regs.{reg01}")
             if d == 1:
                 printb(f"{reg01}, {reg02}")
-                try:
-                    exec(f"regs.{reg01} = regs.{reg02}")
-                except:
-                    print(" [Evaluation failed]")
-                    continue
+                exec(f"regs.{reg01} = regs.{reg02}")
         case [1, 0, 1, 1, w, r1, r2, r3]:
             printb("mov ")
-            reg = r3 + (r2 << 1) + (r1 << 2)
+            reg = bits_to_byte(r1, r2, r3)
 
             reg01 = decode_reg(reg, w)
             printb(f"{reg01}, ")
@@ -472,17 +505,29 @@ while True:
             data = decode_imm_data(w)
             printb(f"{data}")
 
-            try:
-                exec(f"regs.{reg01} = {data}")  # hacky hacky
-            except:
-                print(" [Evaluation failed]")
-                continue
+            exec(f"regs.{reg01} = {data}")
+
+        case [1, 1, 0, 0, 0, 1, 1, w]:
+            byte = get_byte()
+            mod = byte >> 6
+            rm = byte & 0b00000111
+
+            printb(f"mov {mod:02b}")
+
+            reg = decode_reg02(rm, mod, w)
+            imm = decode_imm_data(w)
+            # get_byte()
+            # get_byte()
+
+            # printb(f"{reg}, {imm}")
 
         case other:
             print(f"\nCouldn't parse byte {other}")
             finished()
 
-    printb("\n")
+    printb(f"\t\t; Flags = 0b{regs.flags:08b}\n")
+    if extra == "demo":
+        sleep(0.3)
 
 
 # NOTE: end of program is in finished()
