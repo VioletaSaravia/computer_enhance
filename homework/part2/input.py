@@ -38,6 +38,7 @@ def generate_smooth_noise_tuples(N, scale=0.1):
 
     return result
 
+
 input_smooth = generate_smooth_noise_tuples(length, 80)
 with open("homework/part2/input_smooth.json", "w", encoding="utf-8") as f:
     json.dump(
