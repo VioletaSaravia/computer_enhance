@@ -6,6 +6,7 @@
             "command": "cl.exe",
             "args": [
                 "/Zi",
+                "/std:c++20",
                 "/EHsc",
                 "/nologo",
                 "/Fe${fileDirname}\\${fileBasenameNoExtension}.exe",

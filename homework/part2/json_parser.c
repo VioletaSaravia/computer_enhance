@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "log.c"
+#include "allocator.c"
+
 typedef enum
 {
     JSON_NULL,
@@ -21,32 +24,41 @@ typedef struct
     uint64_t len;
 } String;
 
-typedef struct JsonValue JsonValue;
+static Allocator Arena;
+static Allocator TempArena;
+
+typedef struct JsonValueNode JsonValueNode;
+
+typedef struct JsonKeyValue JsonKeyValue;
 typedef struct
 {
-    uint64_t len, size;
-    JsonValue *data;
-} JsonArray;
+    JsonKeyValue *kvs;
+    uint64_t size;
+} JsonObject;
 
-typedef struct JsonObject JsonObject;
-struct JsonObject
-{
-    JsonValue *data;
-    String *keys;
-    uint64_t len, size;
-};
-
-struct JsonValue
+typedef struct
 {
     JsonType type;
     union
     {
         bool boolean;
         String string;
-        double_t number;
+        double number;
         JsonObject object;
-        JsonArray array;
+        JsonValueNode *array;
     };
+} JsonValue;
+
+struct JsonKeyValue
+{
+    String key;
+    JsonValue value;
+};
+
+struct JsonValueNode
+{
+    JsonValue val;
+    JsonValueNode *next;
 };
 
 typedef struct
@@ -55,6 +67,19 @@ typedef struct
     uint64_t at, to;
     JsonValue output;
 } JsonParser;
+
+char ParserIter(JsonParser *p)
+{
+    char result = '\0';
+
+    if (p->at < p->input.len)
+    {
+        result = p->input.text[p->at];
+        p->at++;
+    }
+
+    return result;
+}
 
 uint64_t SimpleHash(String str)
 {
@@ -95,7 +120,9 @@ void ParseJsonBool(JsonParser *p, bool *val)
     if (p->input.text[p->at] == 'f' && p->input.len >= p->at + 4)
     {
         if (memcmp((void *)&p->input.text[p->at], (void *)"false", 5) != 0)
-            abort();
+        {
+            LOG_FATAL("Expected FALSE");
+        }
 
         *val = false;
         p->at += 4;
@@ -105,25 +132,27 @@ void ParseJsonBool(JsonParser *p, bool *val)
     if (p->input.text[p->at] == 't' && p->input.len >= p->at + 3)
     {
         if (memcmp((void *)&p->input.text[p->at], (void *)"true", 4) != 0)
-            abort();
+        {
+            LOG_FATAL("Expected TRUE");
+        }
 
         *val = false;
         p->at += 3;
         return;
     }
 
-    abort();
+    LOG_FATAL("Reached EOF while parsing BOOL");
 }
 
 void ParseJsonNull(JsonParser *p)
 {
     if (memcmp((void *)&p->input.text[p->at], "null", 4) == 0)
     {
-        p->at += 4;
+        p->at += 3;
     }
     else
     {
-        abort();
+        LOG_FATAL("Expected NULL");
     }
 }
 
@@ -136,14 +165,10 @@ typedef enum
     ARRAY_COMMA_OR_END
 } ArrayPosition;
 
-void ParseJsonArray(JsonParser *p, JsonArray *val)
+void ParseJsonArray(JsonParser *p, JsonValueNode **val)
 {
+    JsonValueNode *newNode = 0;
     ArrayPosition next = ARRAY_BEGIN;
-    *val = (JsonArray){
-        .data = malloc(sizeof(JsonValue) * 1),
-        .len = 0,
-        .size = 1,
-    };
 
     for (; p->at < p->input.len - 1; p->at++)
     {
@@ -169,13 +194,11 @@ void ParseJsonArray(JsonParser *p, JsonArray *val)
             break;
 
         case ARRAY_VALUE:
-            if (val->len == val->size)
-            {
-                val->size *= 2;
-                val->data = realloc(val->data, sizeof(JsonValue) * val->size);
-            }
-            ParseJsonValue(p, &val->data[val->len]);
-            val->len++;
+            newNode = Alloc(&Arena, sizeof(JsonValueNode));
+            ParseJsonValue(p, &newNode->val);
+
+            newNode->next = *val;
+            *val = newNode;
 
             next = ARRAY_COMMA_OR_END;
             break;
@@ -194,18 +217,26 @@ void ParseJsonArray(JsonParser *p, JsonArray *val)
             {
                 return;
             }
-            else
-            {
-                abort();
-            }
 
         default:
-            abort();
+            LOG_FATAL("Invalid character while parsing array");
         }
     }
 
-    printf("[ERROR] Reached EOF while parsing array\n");
-    abort();
+    LOG_FATAL("Reached EOF while parsing array");
+}
+
+void StrCpy(String to, char *source)
+{
+    for (uint64_t i = 0; i < to.len; i++)
+    {
+        if (source[i] == '\0')
+        {
+            LOG_WARNING("Source char* is shorter than target string's length");
+            return;
+        }
+        to.text[i] = source[i];
+    }
 }
 
 typedef enum
@@ -236,8 +267,7 @@ void ParseJsonString(JsonParser *p, String *val)
             }
             else
             {
-                printf("Invalid char %c while parsing string", ch);
-                abort();
+                LOG_FATAL("Invalid char while parsing string");
             }
 
         case STRING_TEXT:
@@ -255,7 +285,9 @@ void ParseJsonString(JsonParser *p, String *val)
             }
 
         case STRING_END_QUOTE:
-            *val = (String){.text = &p->input.text[p->at], .len = p->to};
+            *val = (String){.text = Alloc(&Arena, p->to), .len = p->to};
+            StrCpy(*val, &p->input.text[p->at]);
+
             p->at += p->to;
             p->to = 0;
             return;
@@ -265,8 +297,7 @@ void ParseJsonString(JsonParser *p, String *val)
         }
     }
 
-    printf("[ERROR] Reached EOF while parsing string");
-    abort();
+    LOG_FATAL("Reached EOF while parsing string");
 }
 
 typedef enum
@@ -278,26 +309,16 @@ typedef enum
     PARSING_COMMA_OR_END,
 } ObjectPosition;
 
-JsonValue *JsonObjGet(JsonObject o, String key)
-{
-    uint64_t hash = Hash(key) % o.size;
-    // TODO
-    for (uint64_t i = 0; i < o.size - 1 && strcmp(key.text, o.keys[(hash + i) % o.size].text) != 0, i++;)
-    {
-    }
-    return &o.data[hash];
-}
-
 void ParseJsonObject(JsonParser *p, JsonObject *val)
 {
     *val = (JsonObject){
-        .keys = malloc(sizeof(String) * 256),
-        .data = malloc(sizeof(JsonValue) * 256),
-        .len = 0,
         .size = 256,
-    };
+        .kvs = Alloc(&Arena, sizeof(JsonKeyValue) * 12)};
 
     ObjectPosition next = PARSING_BEGIN;
+
+    String curKey = {0};
+    uint64_t curHash = 0;
 
     for (; p->at < p->input.len; p->at++)
     {
@@ -320,22 +341,24 @@ void ParseJsonObject(JsonParser *p, JsonObject *val)
                 next = PARSING_KEY;
                 continue;
             }
-            abort(); // unreachable
+            UNREACHABLE;
 
         case PARSING_KEY:
-            if (val->len == val->size)
+            ParseJsonString(p, &curKey);
+            curHash = Hash(curKey) % val->size;
+            if (val->kvs->key.text != 0)
             {
-                val->size *= 2;
-                val->keys = realloc(val->keys, val->size * sizeof(String));
-                val->data = realloc(val->data, val->size * sizeof(JsonValue));
+                LOG_WARNING("Hash collision");
             }
-            ParseJsonString(p, &val->keys[val->len]);
+
+            val->kvs[curHash].key = curKey;
+
             next = PARSING_COLON;
             break;
 
         case PARSING_VALUE:
-            ParseJsonValue(p, &val->data[Hash(val->keys[val->len]) % val->size]);
-            val->len++;
+            ParseJsonValue(p, &val->kvs[curHash].value);
+
             next = PARSING_COMMA_OR_END;
             break;
 
@@ -353,6 +376,10 @@ void ParseJsonObject(JsonParser *p, JsonObject *val)
             {
                 return;
             }
+            else
+            {
+                LOG_FATAL("Invalid character, expected COMMA or CLOSE_BRACKET");
+            }
 
         case PARSING_COLON:
             if (CharCanBeIgnored(ch))
@@ -366,7 +393,7 @@ void ParseJsonObject(JsonParser *p, JsonObject *val)
             }
             else
             {
-                abort();
+                LOG_FATAL("Invalid character, expected COLON");
             }
 
         default:
@@ -374,8 +401,7 @@ void ParseJsonObject(JsonParser *p, JsonObject *val)
         }
     }
 
-    printf("EOF\n");
-    abort();
+    LOG_FATAL("Reached EOF while parsing OBJECT");
 }
 
 void ParseJsonValue(JsonParser *p, JsonValue *val)
@@ -383,7 +409,12 @@ void ParseJsonValue(JsonParser *p, JsonValue *val)
     while (true)
     {
         char ch = p->input.text[p->at];
-        if (ch == '{')
+        if (CharCanBeIgnored(ch))
+        {
+            p->at++;
+            continue;
+        }
+        else if (ch == '{')
         {
             val->type = JSON_OBJECT;
             ParseJsonObject(p, &val->object);
@@ -419,65 +450,11 @@ void ParseJsonValue(JsonParser *p, JsonValue *val)
             ParseJsonString(p, &val->string);
             return;
         }
-        else if (CharCanBeIgnored(ch))
-        {
-            p->at++;
-            continue;
-        }
         else
         {
-            printf("Invalid character: %c\n", ch);
-            abort();
+            LOG_FATAL("Invalid character");
         }
     }
-}
-
-void JsonPrintBool(bool val)
-{
-    printf(val ? "true" : "false");
-}
-
-void JsonPrintString(String val)
-{
-    printf("\"%.*s\"", (int)(val.len), val.text);
-}
-
-void JsonPrintNumber(double val)
-{
-    printf("%.2f", val);
-}
-
-void JsonPrint(JsonValue val);
-
-void JsonPrintObject(JsonObject val)
-{
-    printf("{");
-
-    for (uint64_t i = 0; i < val.len; i++)
-    {
-        printf("\n\t");
-        JsonPrint((JsonValue){.type = JSON_STRING, .string = val.keys[i]});
-        printf(": ");
-        JsonPrint(val.data[Hash(val.keys[i]) % val.size]);
-        if (i + 1 < val.len)
-        {
-            printf(",");
-        }
-    }
-    printf(val.len != 0 ? "\n}" : "}");
-}
-
-void JsonPrintArray(JsonArray val)
-{
-    printf("[");
-    for (uint64_t i = 0; i < val.len; i++)
-    {
-        printf("\n\t");
-        JsonPrint(val.data[i]);
-        if (i + 1 < val.len)
-            printf(",");
-    }
-    printf("\n]");
 }
 
 void JsonPrint(JsonValue val)
@@ -488,57 +465,114 @@ void JsonPrint(JsonValue val)
         printf("null");
         break;
     case JSON_BOOL:
-        JsonPrintBool(val.boolean);
+        printf(val.boolean ? "true" : "false");
         break;
     case JSON_STRING:
-        JsonPrintString(val.string);
+        printf("\"%.*s\"", (int)(val.string.len), val.string.text);
         break;
     case JSON_NUMBER:
-        JsonPrintNumber(val.number);
+        printf("%.2f", val.number);
         break;
     case JSON_OBJECT:
-        JsonPrintObject(val.object);
-        break;
+    {
+        printf("{");
+
+        uint64_t printed = 0;
+        bool first = true;
+        for (uint64_t i = 0; i < val.object.size; i++)
+        {
+            JsonKeyValue next = val.object.kvs[i];
+            if (next.key.text == 0)
+                continue;
+
+            printed++;
+            if (first)
+                first = false;
+            else
+                printf(",");
+
+            JsonPrint((JsonValue){.type = JSON_STRING, .string = next.key});
+            printf(":");
+            JsonPrint(next.value);
+        }
+        printf(printed != 0 ? "}" : "}");
+    }
+    break;
     case JSON_ARRAY:
-        JsonPrintArray(val.array);
-        break;
+    {
+        printf("[");
+
+        bool first = true;
+        for (JsonValueNode *next = val.array; next; next = next->next)
+        {
+            if (first)
+                first = false;
+            else
+                printf(",");
+            JsonPrint(next->val);
+        }
+
+        printf("]");
+    }
+    break;
     default:
-        printf("[Warning] Invalid print value type: %i", val.type);
+        LOG_WARNING("Invalid value type");
         return;
     }
 }
 
-JsonValue LoadJson(const char *path)
+String LoadFile(const char *path, Allocator allocator)
 {
-    const char *filePath = path ? path : "input_uniform.json";
-    FILE *f = fopen(filePath, "r");
+    FILE *f = fopen(path, "r");
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char *string = (char *)malloc(fsize + 1);
+    char *string = Alloc(&allocator, fsize + 1);
 
     fread(string, fsize, 1, f);
     fclose(f);
 
     string[fsize] = 0;
 
-    JsonParser parser = {.input = (String){
-                             .len = fsize + 1,
-                             .text = string,
-                         }};
+    return (String){
+        .len = fsize + 1,
+        .text = string,
+    };
+}
 
-    printf("[INFO] Started parsing %s\n", filePath);
+JsonValue LoadJson(String json)
+{
+    JsonParser parser = {.input = json};
     ParseJsonValue(&parser, &parser.output);
-    // JsonPrint(parser.output);
-    // printf("\n");
-    printf("[INFO] Finished parsing %s\n", filePath);
-
     return parser.output;
 }
 
-int32_t main(int argc, char const *argv[])
+#define KB(val) val * 1024
+#define MB(val) KB(val) * 1024
+#define GB(val) MB(val) * 1024
+
+int main(int argc, char const *argv[])
 {
-    JsonValue test = LoadJson(NULL);
+    PROFILE("allocating arenas",
+            Arena = NewArena(GB(1));
+            TempArena = NewArena(GB(1)););
+
+    String file = {0};
+    PROFILE("loading file",
+            const char *path = argc > 1 ? argv[1] : "input_uniform.json";
+            file = LoadFile(path, TempArena););
+
+    JsonValue test = {0};
+    PROFILE("parsing json",
+            test = LoadJson(file););
+
+    if (argc > 2 && strcmp(argv[2], "print") == 0)
+    {
+        PROFILE("printing parsed json",
+                JsonPrint(test);
+                printf("\n"));
+    }
+
     return 0;
 }

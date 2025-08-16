@@ -1,1 +1,6 @@
 homework/part2/input*.json
+*.exe
+*.pdb
+*.obj
+*.ilk
+*.o
