@@ -96,9 +96,9 @@ struct FixedArray
         return data[len - 1];
     }
 
-    T &operator[](u64 id) // TODO return type
+    T &operator[](u64 id)
     {
-        if (id >= len)
+        if (id >= cap)
         {
             abort();
         }
@@ -260,14 +260,16 @@ struct Profiler
             return;
         }
 
-        printf("[INFO] Finished profiler %s in %.6f seconds\n", name, f64(ReadOSTimer() - start) / f64(GetOSTimerFreq()));
+        f64 totalTime = f64(ReadOSTimer() - start) / f64(GetOSTimerFreq());
+        printf("[INFO] Finished profiler %s in %.6f seconds\n", name, totalTime);
         for (u64 i = 1; i < measurements.cap; i++)
         {
             auto next = measurements[i];
             if (next.iterations == 0)
                 continue;
 
-            printf("\t> %lld) %s [%lld]: %.6f secs total\n", i, next.label, next.iterations, (f64(next.soFar) / f64(GetOSTimerFreq())));
+            f64 nextTime = (f64(next.soFar) / f64(GetOSTimerFreq()));
+            printf("\t> %lld) %s [%lld]:\t%.6f secs \t(%.2f%%)\n", i, next.label, next.iterations, nextTime, (nextTime / totalTime) * 100);
         }
     }
 

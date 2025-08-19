@@ -78,6 +78,7 @@ static void pairvec_reserve(VecHaversinePair *v, size_t want)
 }
 static void pairvec_push(VecHaversinePair *v, HaversinePair p)
 {
+    PROFILE_FUNCTION();
     if (v->len == v->cap)
         pairvec_reserve(v, v->cap ? v->cap * 2 : 16);
     v->data[v->len++] = p;
