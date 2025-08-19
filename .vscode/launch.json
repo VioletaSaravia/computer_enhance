@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Run Odin File",
+            "args": [],
+            "cwd": "${fileDirname}",
+            "program": "${fileDirname}/${fileBasenameNoExtension}.exe"
+        },
+        {
+            "name": "C/C++: cl.exe build and debug active file",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${fileDirname}\\${fileBasenameNoExtension}_release.exe",
+            "args": [
+                "${inputs:num}"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "console": "integratedTerminal",
+            "preLaunchTask": "C/C++: cl.exe Release build active file"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "num",
+            "description": "num",
+            "type": "promptString",
+        }
+    ]
+}
