@@ -29,14 +29,14 @@
             "label": "C/C++: clang++ build active file",
             "command": "clang++",
             "args": [
-                "-g", // debug info like /Zi
-                "-std=c++20", // C++20 standard
-                "-Wall", // enable warnings
+                "-g",
+                "-std=c++20",
+                "-Wall",
                 "-Wextra",
                 "-Wswitch-enum",
                 "-o",
-                "${fileDirname}/${fileBasenameNoExtension}.exe", // output executable
-                "${file}" // input file
+                "${fileDirname}/${fileBasenameNoExtension}.exe",
+                "${file}"
             ],
             "options": {
                 "cwd": "${fileDirname}"

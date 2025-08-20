@@ -1,92 +1,6 @@
-#include <cstdio>
+#include <stdio.h>
 
 #include "types.h"
-
-template <typename T>
-struct Array
-{
-    T *data;
-    u64 len, cap;
-
-    ~Array()
-    {
-        if (this->data)
-            free(this->data);
-    }
-
-    void Push(T &element)
-    {
-        if (len >= cap)
-        {
-            cap *= 2;
-            data = realloc(data, sizeof(T) * cap);
-        }
-
-        data[len] = element;
-        len++;
-    }
-
-    T &Pop()
-    {
-        if (len == 0)
-            abort();
-
-        len -= 1;
-        return data[len];
-    }
-
-    T &operator[](u64 id)
-    {
-        if (id >= cap)
-            abort();
-        return data[id];
-    }
-};
-
-template <typename T, unsigned int N>
-struct FixedArray
-{
-    T data[N];
-    u64 len, cap = N;
-
-    void Push(T &element)
-    {
-        if (len >= N)
-            return;
-
-        data[len] = element;
-        len++;
-    }
-
-    T &Pop()
-    {
-        if (len == 0)
-            abort();
-
-        len -= 1;
-        return data[len];
-    }
-
-    T &Last()
-    {
-        if (len == 0)
-            abort();
-
-        return data[len - 1];
-    }
-
-    T &operator[](u64 id)
-    {
-        if (id >= cap)
-        {
-            abort();
-        }
-
-        return data[id];
-    }
-};
-
-typedef Array<char> String;
 
 template <int N>
 using FixedString = FixedArray<char, N>;
@@ -346,6 +260,19 @@ typedef struct
     u64 time, bytes;
 } RepMeasurement;
 
+extern "C"
+{
+    i32 ByTime(const void *from, const void *to)
+    {
+        return ((RepMeasurement *)(from))->time - ((RepMeasurement *)(to))->time;
+    }
+
+    i32 ByBytes(const void *from, const void *to)
+    {
+        return ((RepMeasurement *)(from))->bytes - ((RepMeasurement *)(to))->bytes;
+    }
+}
+
 typedef struct RepetitionProfiler
 {
     cstr name;
@@ -404,18 +331,30 @@ typedef struct RepetitionProfiler
         printf("[INFO] Finished profiler %s after %lld repeats.\n", this->name, this->repeats);
 
         f64 minTime = f64(this->min.time) / f64(GetOSTimerFreq());
-        printf("\t> Min: %.4f secs, %.4f MB/s\n", minTime, f64(this->min.bytes) / minTime / 1024.0 / 1024.0);
+        printf("\t> Min: \t%.4f ms\t%.4f MB/s\n", minTime * 1000.0, f64(this->min.bytes) / minTime / 1024.0 / 1024.0);
         f64 maxTime = f64(this->max.time) / f64(GetOSTimerFreq());
-        printf("\t> Max: %.4f secs, %.4f MB/s\n", maxTime, f64(this->max.bytes) / maxTime / 1024.0 / 1024.0);
-        f64 avgTime = f64(this->avg.time) / f64(GetOSTimerFreq());
-        printf("\t> Avg: %.4f secs, %.4f MB/s\n", avgTime, f64(this->avg.bytes) / avgTime / 1024.0 / 1024.0);
+        printf("\t> Max: \t%.4f ms\t%.4f MB/s\n", maxTime * 1000.0, f64(this->max.bytes) / maxTime / 1024.0 / 1024.0);
 
-        // for (u64 i = 0; i < this->repeats; i++)
-        // {
-        //     f64 iTime = f64(this->all[i].time) / f64(GetOSTimerFreq());
-        //     printf("\t> [%lld] %.6f secs, %.4f MB/s\n", i, iTime, f64(this->all[i].bytes) / iTime / 1024.0 / 1024.0);
-        // }
+        for (u64 i = 0; i < repeats; i++)
+        {
+            this->avg.time += all[i].time;
+            this->avg.bytes += all[i].bytes;
+        }
+        f64 avgTime = f64(avg.time) / f64(repeats);
+        f64 avgBytes = f64(avg.bytes) / f64(repeats);
+
+        avgTime /= f64(GetOSTimerFreq());
+        printf("\t> Avg: \t%.4f ms\t%.4f MB/s\n", avgTime * 1000.0, f64(avgBytes) / avgTime / 1024.0 / 1024.0);
+
+        qsort(all, repeats, sizeof(RepMeasurement), ByTime);
+        f64 meanTime = all[repeats / 2].time / f64(GetOSTimerFreq());
+
+        // qsort(all, repeats, sizeof(RepMeasurement), ByBytes);
+        f64 meanBytes = all[repeats / 2].bytes;
+        printf("\t> Mean:\t%.4f ms\t%.4f MB/s\n", meanTime * 1000.0, f64(meanBytes) / meanTime / 1024.0 / 1024.0);
+
         printf("\n");
+        free(all);
     }
 } RepetitionProfiler;
 
