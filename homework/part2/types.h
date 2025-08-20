@@ -32,3 +32,8 @@ typedef const char *cstr;
 #else
     #define DEFER(func)
 #endif
+
+#define PI 3.14159265358979323846
+
+inline double Deg2Rad(double deg) { return deg * (PI / 180.0); }
+inline double Rad2Deg(double rad) { return rad / (PI / 180.0); }

@@ -8,6 +8,12 @@ struct Array
     T *data;
     u64 len, cap;
 
+    ~Array()
+    {
+        if (this->data)
+            free(this->data);
+    }
+
     void Push(T &element)
     {
         if (len >= cap)
@@ -136,18 +142,19 @@ u64 EstimateCPUTimerFreq(void)
     return CPUFreq;
 };
 
+struct Measurement
+{
+    cstr label, file;
+    i32 line;
+
+    u64 iterations;
+    u64 from, timeEx, timeInc;
+
+    u64 bytesProcessed;
+};
+
 struct Profiler
 {
-    struct Measurement
-    {
-        cstr label, file;
-        i32 line;
-
-        u64 iterations;
-        u64 from, timeEx, timeInc;
-
-        u64 bytesProcessed;
-    };
 
     struct BlockFlag
     {
@@ -328,3 +335,103 @@ bool Profiler::IHateCpp{};
 #define PROFILE(name, code) code
 
 #endif
+
+typedef enum
+{
+    None
+} RepType;
+
+typedef struct
+{
+    u64 time, bytes;
+} RepMeasurement;
+
+typedef struct RepetitionProfiler
+{
+    cstr name;
+
+    RepMeasurement min, max, avg, current;
+    RepMeasurement *all;
+    u64 repeats, maxRepeats;
+    RepType type;
+
+    static RepetitionProfiler New(cstr name, u64 maxRepeats = 1000)
+    {
+        return RepetitionProfiler{
+            .name = name,
+            .min = {},
+            .max = {},
+            .avg = {},
+            .current = {},
+            .all = (RepMeasurement *)malloc(sizeof(RepMeasurement) * maxRepeats),
+            .repeats = 0,
+            .maxRepeats = maxRepeats,
+            .type = ::None,
+        };
+    }
+
+    void BeginRep()
+    {
+        this->current.time = ReadOSTimer();
+    }
+
+    void AddBytes(u64 bytes)
+    {
+        this->current.bytes += bytes;
+    }
+
+    void EndRep()
+    {
+        this->current.time = ReadOSTimer() - this->current.time;
+
+        if (this->current.time < this->min.time || this->min.time == 0)
+        {
+            this->min = this->current;
+        }
+
+        if (this->current.time > this->max.time || this->max.time == 0)
+        {
+            this->max = this->current;
+        }
+
+        this->all[this->repeats] = this->current;
+        this->repeats++;
+        this->current = {};
+    }
+
+    ~RepetitionProfiler()
+    {
+        printf("[INFO] Finished profiler %s after %lld repeats.\n", this->name, this->repeats);
+
+        f64 minTime = f64(this->min.time) / f64(GetOSTimerFreq());
+        printf("\t> Min: %.4f secs, %.4f MB/s\n", minTime, f64(this->min.bytes) / minTime / 1024.0 / 1024.0);
+        f64 maxTime = f64(this->max.time) / f64(GetOSTimerFreq());
+        printf("\t> Max: %.4f secs, %.4f MB/s\n", maxTime, f64(this->max.bytes) / maxTime / 1024.0 / 1024.0);
+        f64 avgTime = f64(this->avg.time) / f64(GetOSTimerFreq());
+        printf("\t> Avg: %.4f secs, %.4f MB/s\n", avgTime, f64(this->avg.bytes) / avgTime / 1024.0 / 1024.0);
+
+        // for (u64 i = 0; i < this->repeats; i++)
+        // {
+        //     f64 iTime = f64(this->all[i].time) / f64(GetOSTimerFreq());
+        //     printf("\t> [%lld] %.6f secs, %.4f MB/s\n", i, iTime, f64(this->all[i].bytes) / iTime / 1024.0 / 1024.0);
+        // }
+        printf("\n");
+    }
+} RepetitionProfiler;
+
+#define REPETITION_PROFILE(name, count)                        \
+    do                                                         \
+    {                                                          \
+        auto _profiler = RepetitionProfiler::New(name, count); \
+        while (_profiler.repeats < _profiler.maxRepeats)       \
+        {                                                      \
+            _profiler.BeginRep();
+
+#define REPETITION_BANDWIDTH(bytes) _profiler.AddBytes(bytes)
+
+#define REPETITION_END() \
+    _profiler.EndRep();  \
+    }                    \
+    }                    \
+    while (0)            \
+        ;

@@ -8,8 +8,6 @@
 #include <windows.h>
 #endif
 
-#define PI 3.14159265358979323846
-
 #include "types.h"
 #include "profiler.cpp"
 
@@ -17,10 +15,6 @@ typedef struct
 {
     double x0, y0, x1, y1;
 } HaversinePair;
-
-/* ---------- math ---------- */
-inline double Deg2Rad(double deg) { return deg * (PI / 180.0); }
-inline double Rad2Deg(double rad) { return rad / (PI / 180.0); }
 
 static double Haversine(HaversinePair p, double radius)
 {
@@ -173,7 +167,7 @@ static void GenerateHaversineJson(int count, const char *path)
     fclose(f);
 }
 
-static Array<u8> read_entire_file(const char *path)
+Array<u8> ReadEntireFile(const char *path)
 {
     Array<u8> result = {};
     FILE *f = {};
@@ -232,7 +226,7 @@ typedef struct
     bool success;
 } ParseResult;
 
-static ParseResult ParseHaversineJson(Array<u8> bytes, int expected_count)
+static ParseResult ParseHaversineJson(Array<u8>& bytes, int expected_count)
 {
     PROFILE_FUNCTION();
     ParseResult pr = {};
@@ -378,21 +372,27 @@ i32 main(i32 argc, cstr *argv)
 
     if (pairCount == 0)
     {
-        pairCount = 100;
+        pairCount = 25000;
     }
     srand(123456789u);
     PROFILE_BLOCK_END();
 
     GenerateHaversineJson(pairCount, "input.json");
 
+    REPETITION_PROFILE("ReadEntireFile", 100)
+    Array<u8> file = ReadEntireFile("input.json");
+    REPETITION_BANDWIDTH(file.cap);
+    REPETITION_END();
+
     PROFILE_BLOCK_BEGIN("Reading json input");
-    Array<u8> file = read_entire_file("input.json");
-    PROFILE_ADD_BANDWIDTH(file.cap);
+    auto file = ReadEntireFile("input.json");
+
     if (!file.data)
     {
         fprintf(stderr, "[ERROR] Failed to read input.json\n");
         return 1;
     };
+    PROFILE_ADD_BANDWIDTH(file.cap);
     PROFILE_BLOCK_END();
 
     ParseResult pr = {};
@@ -407,7 +407,6 @@ i32 main(i32 argc, cstr *argv)
 
     SumHaversines(pr.result.data, pr.result.len);
 
-    free(file.data);
     free(pr.result.data);
 
     return 0;
