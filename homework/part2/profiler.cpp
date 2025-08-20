@@ -1,33 +1,6 @@
 #include <cstdio>
-#include <cstdint>
-#include <Windows.h>
 
-typedef uint8_t u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int8_t i8;
-typedef int16_t i16;
-typedef int32_t i32;
-typedef int64_t i64;
-typedef float f32;
-typedef double f64;
-typedef const char *cstr;
-
-template <typename T>
-struct Maybe
-{
-    bool nil;
-    T val;
-
-    T Unwrap()
-    {
-        if (nil)
-            abort();
-        else
-            return val;
-    }
-};
+#include "types.h"
 
 template <typename T>
 struct Array
@@ -112,14 +85,14 @@ typedef Array<char> String;
 template <int N>
 using FixedString = FixedArray<char, N>;
 
-static u64 GetOSTimerFreq(void)
+u64 GetOSTimerFreq(void)
 {
     LARGE_INTEGER Freq;
     QueryPerformanceFrequency(&Freq);
     return Freq.QuadPart;
 }
 
-static u64 ReadOSTimer(void)
+u64 ReadOSTimer(void)
 {
     LARGE_INTEGER Value;
     QueryPerformanceCounter(&Value);
@@ -135,7 +108,7 @@ inline u64 ReadCPUTimer(void)
     return __rdtsc();
 }
 
-static u64 EstimateCPUTimerFreq(void)
+u64 EstimateCPUTimerFreq(void)
 {
     u64 MillisecondsToWait = 100;
     u64 OSFreq = GetOSTimerFreq();
@@ -161,17 +134,21 @@ static u64 EstimateCPUTimerFreq(void)
     }
 
     return CPUFreq;
-}
-
-struct Measurement
-{
-    cstr label;
-    u64 iterations;
-    u64 from, soFar;
 };
 
 struct Profiler
 {
+    struct Measurement
+    {
+        cstr label, file;
+        i32 line;
+
+        u64 iterations;
+        u64 from, timeEx, timeInc;
+
+        u64 bytesProcessed;
+    };
+
     struct BlockFlag
     {
         Profiler *parent;
@@ -184,25 +161,30 @@ struct Profiler
     cstr name;
     bool ended;
     u64 start;
+    bool printFile;
 
     FixedArray<Measurement, 64> measurements;
-    FixedArray<i32, 64> queue;
+    FixedArray<u64, 64> queue;
 
     static Profiler _Profiler;
-    static bool IHateCpp;
+    static bool IHateCpp; // Prevents destructor from being called on init <.<
     static Profiler &Get()
     {
         return Profiler::_Profiler;
     }
-    static void New(cstr name = "")
+    static void New(cstr name = "", bool printFile = false)
     {
         Profiler::_Profiler = Profiler{
             .name = name,
+            .ended = false,
             .start = ReadOSTimer(),
+            .printFile = printFile,
+            .measurements = {},
+            .queue = {},
         };
     }
 
-    void BeginBlock(i32 id, cstr label = "")
+    void BeginBlock(u64 id, cstr label = "", cstr file = "", i32 line = 0, u64 bytesProcessed = 0)
     {
         if (id >= measurements.cap)
         {
@@ -215,11 +197,15 @@ struct Profiler
         if (queue.len > 0)
         {
             Measurement *prev = &measurements[queue.Last()];
-            prev->soFar += time - prev->from;
+            prev->timeEx += time - prev->from;
+            prev->timeInc += time - prev->from;
         }
 
         m->from = time;
         m->label = label;
+        m->file = file;
+        m->line = line;
+        m->bytesProcessed += bytesProcessed;
 
         queue.Push(id);
 
@@ -228,9 +214,14 @@ struct Profiler
         return;
     }
 
-    BlockFlag BeginScopeBlock(i32 id, cstr label)
+    void AddBytes(u64 bytes)
     {
-        BeginBlock(id, label);
+        measurements[queue.Last()].bytesProcessed += bytes;
+    }
+
+    BlockFlag BeginScopeBlock(i32 id, cstr label, cstr file = "", i32 line = 0, u64 bytesProcessed = 0)
+    {
+        BeginBlock(id, label, file, line, bytesProcessed);
         return BlockFlag{.parent = this};
     }
 
@@ -239,12 +230,15 @@ struct Profiler
         u64 now = ReadOSTimer();
 
         Measurement *m = &measurements[queue.Pop()];
-        m->soFar += now - m->from;
+        m->timeEx += now - m->from;
+        m->timeInc += now - m->from;
 
         if (queue.len > 0)
         {
+            // TODO rodata in [] so this check is unnecesary
             Measurement *prev = &measurements[queue.Last()];
             prev->from = now;
+            prev->timeInc += now - m->from;
         }
     }
 
@@ -262,14 +256,32 @@ struct Profiler
 
         f64 totalTime = f64(ReadOSTimer() - start) / f64(GetOSTimerFreq());
         printf("[INFO] Finished profiler %s in %.6f seconds\n", name, totalTime);
+        printf(" %-24s \t| %-25s \t| %-25s \t| %-12s\n", "Name[n]", "Time (Ex)", "Time (Inc)", "Bandwidth");
+        printf("---------------------------------------------------------------------------------------------------------------\n");
+
         for (u64 i = 1; i < measurements.cap; i++)
         {
             auto next = measurements[i];
             if (next.iterations == 0)
                 continue;
 
-            f64 nextTime = (f64(next.soFar) / f64(GetOSTimerFreq()));
-            printf("\t> %lld) %s [%lld]:\t%.6f secs \t(%.2f%%)\n", i, next.label, next.iterations, nextTime, (nextTime / totalTime) * 100);
+            f64 nextTimeEx = (f64(next.timeEx) / f64(GetOSTimerFreq()));
+            f64 nextTimeInc = (f64(next.timeInc) / f64(GetOSTimerFreq()));
+            if (next.bytesProcessed == 0)
+            {
+                printf(" %-20s [%lld] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
+                       next.label, next.iterations,
+                       nextTimeEx, (nextTimeEx / totalTime) * 100,
+                       nextTimeInc, (nextTimeInc / totalTime) * 100);
+            }
+            else
+            {
+                printf(" %-20s [%lld] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f MB/s\n",
+                       next.label, next.iterations,
+                       nextTimeEx, (nextTimeEx / totalTime) * 100,
+                       nextTimeInc, (nextTimeInc / totalTime) * 100,
+                       f64(next.bytesProcessed) / nextTimeEx / 1024.0 / 1024.0);
+            }
         }
     }
 
@@ -288,12 +300,31 @@ struct Profiler
 Profiler Profiler::_Profiler{};
 bool Profiler::IHateCpp{};
 
-#define PROFILE_BLOCK_BEGIN(name) Profiler::Get().BeginBlock(__COUNTER__ + 1, name)
-#define PROFILE_BLOCK_END() Profiler::Get().EndBlock()
-#define PROFILE_SCOPE(name) auto __flag##__COUNTER__##__ = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, name)
-#define PROFILE_FUNCTION() auto __profiler_flag##__COUNTER__##__ = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, __func__)
+// #define DISABLE_PROFILER
 
-#define PROFILE(name, code)                            \
-    Profiler::Get().BeginBlock(__COUNTER__ + 1, name); \
-    code;                                              \
-    Profiler::Get().EndBlock();\
+#ifndef DISABLE_PROFILER
+
+#define PROFILER_NEW(name) Profiler::New(name)
+#define PROFILER_END() Profiler::Get().End()
+#define PROFILE_BLOCK_BEGIN(name) Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
+#define PROFILE_ADD_BANDWIDTH(bytes) Profiler::Get().AddBytes(bytes)
+#define PROFILE_BLOCK_END() Profiler::Get().EndBlock()
+#define PROFILE_SCOPE(name) auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
+#define PROFILE_FUNCTION() auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, __func__, __FILE__, __LINE__)
+#define PROFILE(name, code)                                                \
+    Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__); \
+    code;                                                                  \
+    Profiler::Get().EndBlock();
+
+#else
+
+#define PROFILER_NEW(name)
+#define PROFILER_END()
+#define PROFILE_BLOCK_BEGIN(name)
+#define PROFILE_ADD_BANDWIDTH(bytes)
+#define PROFILE_BLOCK_END()
+#define PROFILE_SCOPE(name)
+#define PROFILE_FUNCTION()
+#define PROFILE(name, code) code
+
+#endif

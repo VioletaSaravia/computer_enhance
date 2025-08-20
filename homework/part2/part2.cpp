@@ -1,5 +1,3 @@
-// haversine.c
-#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +10,7 @@
 
 #define PI 3.14159265358979323846
 
+#include "types.h"
 #include "profiler.cpp"
 
 typedef struct
@@ -20,8 +19,8 @@ typedef struct
 } HaversinePair;
 
 /* ---------- math ---------- */
-static inline double Deg2Rad(double deg) { return deg * (PI / 180.0); }
-static inline double Rad2Deg(double rad) { return rad / (PI / 180.0); }
+inline double Deg2Rad(double deg) { return deg * (PI / 180.0); }
+inline double Rad2Deg(double rad) { return rad / (PI / 180.0); }
 
 static double Haversine(HaversinePair p, double radius)
 {
@@ -45,6 +44,7 @@ static double SumHaversines(const HaversinePair *pairs, size_t n)
     double sum = 0.0;
     for (size_t i = 0; i < n; ++i)
     {
+        Profiler::Get().AddBytes(sizeof(HaversinePair));
         sum += coef * Haversine(pairs[i], 6372.8);
     }
     return sum;
@@ -92,15 +92,10 @@ typedef struct
     size_t cap;
 } StrB;
 
-static void strb_init(StrB *s)
-{
-    s->buf = NULL;
-    s->len = 0;
-    s->cap = 0;
-}
 static void strb_reset(StrB *s) { s->len = 0; }
 static void strb_reserve(StrB *s, size_t want)
 {
+    PROFILE_FUNCTION();
     if (want <= s->cap)
         return;
     size_t nc = s->cap ? s->cap : 32;
@@ -135,7 +130,9 @@ static double frand_unit(void) { return (double)rand() / (double)RAND_MAX; }
 static void GenerateHaversineJson(int count, const char *path)
 {
     PROFILE_FUNCTION();
-    FILE *f = fopen(path, "wb");
+
+    FILE *f = {};
+    fopen_s(&f, path, "wb");
     if (!f)
     {
         fprintf(stderr, "open %s failed\n", path);
@@ -147,6 +144,7 @@ static void GenerateHaversineJson(int count, const char *path)
 
     for (int i = 0; i < count; ++i)
     {
+        PROFILE_ADD_BANDWIDTH(3 + 6 + 6 + 6 + 6 + 4);
         fputs("\t{\n", f);
 
         double v = frand_unit() * 160.0 - 80.0;
@@ -171,13 +169,15 @@ static void GenerateHaversineJson(int count, const char *path)
         fputc('\n', f);
     }
     fputs("]\n", f);
+    PROFILE_ADD_BANDWIDTH(4);
     fclose(f);
 }
 
 static Array<u8> read_entire_file(const char *path)
 {
     Array<u8> result = {};
-    FILE *f = fopen(path, "rb");
+    FILE *f = {};
+    fopen_s(&f, path, "rb");
     if (!f)
         return result;
     if (fseek(f, 0, SEEK_END) != 0)
@@ -205,7 +205,7 @@ static Array<u8> read_entire_file(const char *path)
         free(buf);
         return result;
     }
-    return Array<u8>{.data = buf, .cap = (size_t)sz};
+    return Array<u8>{.data = buf, .len = (u64)sz, .cap = (u64)sz};
 }
 
 typedef enum
@@ -235,20 +235,19 @@ typedef struct
 static ParseResult ParseHaversineJson(Array<u8> bytes, int expected_count)
 {
     PROFILE_FUNCTION();
-    ParseResult pr = {0};
+    ParseResult pr = {};
     if (expected_count > 0)
         pairvec_reserve(&pr.result, (size_t)expected_count + 1);
 
     HaversineParsingState state = PS_OpenBracket;
-    StrB curKey, curVal;
-    strb_init(&curKey);
-    strb_init(&curVal);
+    StrB curKey = {}, curVal = {};
 
-    HaversinePair curPair = {0};
-    JsonKeyValue curKv = {0};
+    HaversinePair curPair = {};
+    JsonKeyValue curKv = {};
 
     for (size_t i = 0; i < bytes.cap; ++i)
     {
+        Profiler::Get().AddBytes(1);
         unsigned char b = bytes.data[i];
 
         if ((b == '\n' || b == '\t' || b == '\r' || b == ' ') && state != PS_Key)
@@ -257,24 +256,31 @@ static ParseResult ParseHaversineJson(Array<u8> bytes, int expected_count)
         switch (state)
         {
         case PS_OpenBracket:
+        {
             if (b != '[')
                 goto done;
             else
                 state = PS_OpenBrace;
             break;
+        }
         case PS_OpenBrace:
+        {
             if (b != '{')
                 goto done;
             else
                 state = PS_KeyStart;
             break;
+        }
         case PS_KeyStart:
+        {
             if (b != '\"')
                 goto done;
             else
                 state = PS_Key;
             break;
+        }
         case PS_Key:
+        {
             if (b == '\"')
             {
                 state = PS_Colon;
@@ -284,7 +290,9 @@ static ParseResult ParseHaversineJson(Array<u8> bytes, int expected_count)
                 strb_pushc(&curKey, (char)b);
             }
             break;
+        }
         case PS_Colon:
+        {
             if (b == ':')
             {
                 curKv.key = strb_cstr(&curKey);
@@ -295,7 +303,9 @@ static ParseResult ParseHaversineJson(Array<u8> bytes, int expected_count)
                 goto done;
             }
             break;
+        }
         case PS_Value:
+        {
             if (b == ',' || b == '}')
             {
                 const char *val = strb_cstr(&curVal);
@@ -321,9 +331,12 @@ static ParseResult ParseHaversineJson(Array<u8> bytes, int expected_count)
                 continue; // stay in Value
             }
             break;
+        }
         case PS_Comma:
+        {
             state = (b == '\"') ? PS_Key : PS_Value;
             break;
+        }
         case PS_CloseBrace:
         {
             pairvec_push(&pr.result, curPair);
@@ -338,11 +351,10 @@ static ParseResult ParseHaversineJson(Array<u8> bytes, int expected_count)
             }
             else
             {
-                // tolerate whitespace-only? Already filtered; anything else is error.
                 goto done;
             }
+            break;
         }
-        break;
         }
     }
 
@@ -352,9 +364,9 @@ done:
     return pr;
 }
 
-int main(int argc, char **argv)
+i32 main(i32 argc, cstr *argv)
 {
-    Profiler::New("Harversine Sum NEW");
+    PROFILER_NEW("Haversine Sum");
     PROFILE_BLOCK_BEGIN("Reading console args");
     int pairCount = 0;
     if (argc >= 2)
@@ -365,17 +377,25 @@ int main(int argc, char **argv)
     }
 
     if (pairCount == 0)
+    {
         pairCount = 100;
+    }
     srand(123456789u);
     PROFILE_BLOCK_END();
 
     GenerateHaversineJson(pairCount, "input.json");
 
-    PROFILE("Reading json file", Array<u8> file = {0}; file = read_entire_file("input.json"); if (!file.data) {
-        fprintf(stderr, "failed to read input.json\n");
-        return 1; });
+    PROFILE_BLOCK_BEGIN("Reading json input");
+    Array<u8> file = read_entire_file("input.json");
+    PROFILE_ADD_BANDWIDTH(file.cap);
+    if (!file.data)
+    {
+        fprintf(stderr, "[ERROR] Failed to read input.json\n");
+        return 1;
+    };
+    PROFILE_BLOCK_END();
 
-    ParseResult pr = {0};
+    ParseResult pr = {};
     pr = ParseHaversineJson(file, pairCount);
 
     if (!pr.success)
@@ -385,7 +405,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    double sum = SumHaversines(pr.result.data, pr.result.len);
+    SumHaversines(pr.result.data, pr.result.len);
 
     free(file.data);
     free(pr.result.data);
