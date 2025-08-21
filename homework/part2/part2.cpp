@@ -1,5 +1,4 @@
 #include "types.h"
-#include "profiler.cpp"
 #include "haversine.cpp"
 
 i32 main(i32 argc, cstr *argv)

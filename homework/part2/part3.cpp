@@ -1,3 +1,5 @@
+#define ENABLE_PROFILER
+
 #include "types.h"
 #include "haversine.cpp"
 

@@ -1,4 +1,3 @@
-
 #include "types.h"
 #include "profiler.cpp"
 #include <stdio.h>
@@ -8,25 +7,35 @@ Array<u8> ReadEntireFile(const char *path)
 {
     Array<u8> result = {};
     FILE *f = {};
+    u64 rd = 0;
 
     REPETITION_PROFILE("ReadEntireFile inner w/ malloc", 10000);
 
     result.data = (u8 *)malloc((u64)1024 * 1024 * 512);
     fopen_s(&f, path, "rb");
     if (!f)
+    {
         goto cleanup;
+    }
     if (fseek(f, 0, SEEK_END) != 0)
+    {
         goto cleanup;
+    }
     result.cap = ftell(f);
     result.len = result.cap;
     // u8* buf = (u8 *)malloc((u64)sz);
     REPETITION_BANDWIDTH(result.cap);
     if (result.cap < 0)
+    {
         goto cleanup;
+    }
     rewind(f);
     if (!result.data)
+    {
         goto cleanup;
-    u64 rd = fread(result.data, 1, (u64)result.cap, f);
+    }
+
+    rd = fread(result.data, 1, (u64)result.cap, f);
     fclose(f);
     f = 0;
     if (rd != (u64)result.cap)

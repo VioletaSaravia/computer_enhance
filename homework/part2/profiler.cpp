@@ -221,35 +221,6 @@ struct Profiler
 Profiler Profiler::_Profiler{};
 bool Profiler::IHateCpp{};
 
-// #define DISABLE_PROFILER
-
-#ifndef DISABLE_PROFILER
-
-#define PROFILER_NEW(name) Profiler::New(name)
-#define PROFILER_END() Profiler::Get().End()
-#define PROFILE_BLOCK_BEGIN(name) Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
-#define PROFILE_ADD_BANDWIDTH(bytes) Profiler::Get().AddBytes(bytes)
-#define PROFILE_BLOCK_END() Profiler::Get().EndBlock()
-#define PROFILE_SCOPE(name) auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
-#define PROFILE_FUNCTION() auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, __func__, __FILE__, __LINE__)
-#define PROFILE(name, code)                                                \
-    Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__); \
-    code;                                                                  \
-    Profiler::Get().EndBlock();
-
-#else
-
-#define PROFILER_NEW(name)
-#define PROFILER_END()
-#define PROFILE_BLOCK_BEGIN(name)
-#define PROFILE_ADD_BANDWIDTH(bytes)
-#define PROFILE_BLOCK_END()
-#define PROFILE_SCOPE(name)
-#define PROFILE_FUNCTION()
-#define PROFILE(name, code) code
-
-#endif
-
 typedef enum
 {
     None
@@ -358,6 +329,20 @@ typedef struct RepetitionProfiler
     }
 } RepetitionProfiler;
 
+#ifdef ENABLE_PROFILER
+
+#define PROFILER_NEW(name) Profiler::New(name)
+#define PROFILER_END() Profiler::Get().End()
+#define PROFILE_BLOCK_BEGIN(name) Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
+#define PROFILE_ADD_BANDWIDTH(bytes) Profiler::Get().AddBytes(bytes)
+#define PROFILE_BLOCK_END() Profiler::Get().EndBlock()
+#define PROFILE_SCOPE(name) auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
+#define PROFILE_FUNCTION() auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, __func__, __FILE__, __LINE__)
+#define PROFILE(name, code)                                                \
+    Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__); \
+    code;                                                                  \
+    Profiler::Get().EndBlock();
+
 #define REPETITION_PROFILE(name, count)                        \
     do                                                         \
     {                                                          \
@@ -374,3 +359,20 @@ typedef struct RepetitionProfiler
     }                    \
     while (0)            \
         ;
+
+#else
+
+#define PROFILER_NEW(name)
+#define PROFILER_END()
+#define PROFILE_BLOCK_BEGIN(name)
+#define PROFILE_ADD_BANDWIDTH(bytes)
+#define PROFILE_BLOCK_END()
+#define PROFILE_SCOPE(name)
+#define PROFILE_FUNCTION()
+#define PROFILE(name, code) code
+
+#define REPETITION_PROFILE(name, count)
+#define REPETITION_BANDWIDTH(bytes)
+#define REPETITION_END()
+
+#endif
