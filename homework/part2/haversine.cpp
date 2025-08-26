@@ -1,60 +1,44 @@
 #include "types.h"
 #include "profiler.cpp"
-#include <stdio.h>
+
 #include <math.h>
 
 Array<u8> ReadEntireFile(const char *path)
 {
-    Array<u8> result = {};
+    PROFILE_FUNCTION();
+
     FILE *f = {};
     u64 rd = 0;
 
-    REPETITION_PROFILE("ReadEntireFile inner w/ malloc", 10000);
-
-    result.data = (u8 *)malloc((u64)1024 * 1024 * 512);
     fopen_s(&f, path, "rb");
     if (!f)
     {
-        goto cleanup;
+        fclose(f);
+        return {};
     }
+
     if (fseek(f, 0, SEEK_END) != 0)
-    {
-        goto cleanup;
-    }
-    result.cap = ftell(f);
+        return {};
+
+    u64 cap = ftell(f);
+    PROFILE_ADD_BANDWIDTH(cap);
+    auto result = Array<u8>::New(cap);
     result.len = result.cap;
-    // u8* buf = (u8 *)malloc((u64)sz);
-    REPETITION_BANDWIDTH(result.cap);
+
     if (result.cap < 0)
-    {
-        goto cleanup;
-    }
+        return {};
+
     rewind(f);
     if (!result.data)
-    {
-        goto cleanup;
-    }
+        return {};
 
     rd = fread(result.data, 1, (u64)result.cap, f);
     fclose(f);
     f = 0;
     if (rd != (u64)result.cap)
-    {
-        free(result.data);
         return {};
-    }
 
-    free(result.data); // REMOVE!!!
-    result.data = 0;
-    REPETITION_END();
     return result;
-
-cleanup:
-    if (f)
-        fclose(f);
-    if (result.data)
-        free(result.data);
-    return {};
 }
 
 typedef struct
@@ -84,86 +68,87 @@ static double SumHaversines(const HaversinePair *pairs, size_t n)
     double sum = 0.0;
     for (size_t i = 0; i < n; ++i)
     {
-        Profiler::Get().AddBytes(sizeof(HaversinePair));
+        PROFILE_ADD_BANDWIDTH(sizeof(HaversinePair));
         sum += coef * Haversine(pairs[i], 6372.8);
     }
     return sum;
 }
 
-#define VEC(type)   \
-    typedef struct  \
-    {               \
-        type *data; \
-        size_t len; \
-        size_t cap; \
-    } Vec##type
+// #define VEC(type)   \
+//     typedef struct  \
+//     {               \
+//         type *data; \
+//         size_t len; \
+//         size_t cap; \
+//     } Vec##type
 
-VEC(HaversinePair);
+// VEC(HaversinePair);
 
-static void pairvec_reserve(VecHaversinePair *v, size_t want)
-{
-    if (want <= v->cap)
-        return;
-    size_t new_cap = v->cap ? v->cap : 16;
-    while (new_cap < want)
-        new_cap *= 2;
-    HaversinePair *nd = (HaversinePair *)realloc(v->data, new_cap * sizeof(*nd));
-    if (!nd)
-    {
-        fprintf(stderr, "alloc fail\n");
-        exit(1);
-    }
-    v->data = nd;
-    v->cap = new_cap;
-}
-static void pairvec_push(VecHaversinePair *v, HaversinePair p)
-{
-    PROFILE_FUNCTION();
-    if (v->len == v->cap)
-        pairvec_reserve(v, v->cap ? v->cap * 2 : 16);
-    v->data[v->len++] = p;
-}
+// static void pairvec_reserve(VecHaversinePair *v, size_t want)
+// {
+//     if (want <= v->cap)
+//         return;
+//     size_t new_cap = v->cap ? v->cap : 16;
+//     while (new_cap < want)
+//         new_cap *= 2;
+//     HaversinePair *nd = (HaversinePair *)realloc(v->data, new_cap * sizeof(*nd));
+//     if (!nd)
+//     {
+//         fprintf(stderr, "alloc fail\n");
+//         exit(1);
+//     }
+//     v->data = nd;
+//     v->cap = new_cap;
+// }
+// static void pairvec_push(VecHaversinePair *v, HaversinePair p)
+// {
+//     PROFILE_FUNCTION();
+//     if (v->len == v->cap)
+//         pairvec_reserve(v, v->cap ? v->cap * 2 : 16);
+//     v->data[v->len++] = p;
+// }
 
 /* ---------- tiny string builder ---------- */
-typedef struct
-{
-    char *buf;
-    size_t len;
-    size_t cap;
-} StrB;
 
-static void strb_reset(StrB *s) { s->len = 0; }
-static void strb_reserve(StrB *s, size_t want)
-{
-    PROFILE_FUNCTION();
-    if (want <= s->cap)
-        return;
-    size_t nc = s->cap ? s->cap : 32;
-    while (nc < want)
-        nc *= 2;
-    char *nb = (char *)realloc(s->buf, nc);
-    if (!nb)
-    {
-        fprintf(stderr, "alloc fail\n");
-        exit(1);
-    }
-    s->buf = nb;
-    s->cap = nc;
-}
-static void strb_pushc(StrB *s, char c)
-{
-    if (s->len + 1 >= s->cap)
-        strb_reserve(s, s->cap ? s->cap * 2 : 32);
-    s->buf[s->len++] = c;
-}
-static const char *strb_cstr(StrB *s)
-{
-    if (s->len + 1 >= s->cap)
-        strb_reserve(s, s->len + 2);
-    s->buf[s->len] = '\0';
-    return s->buf;
-}
-static void strb_free(StrB *s) { free(s->buf); }
+// typedef struct
+// {
+//     char *buf;
+//     size_t len;
+//     size_t cap;
+// } StrB;
+
+// static void strb_reset(StrB *s) { s->len = 0; }
+// static void strb_reserve(StrB *s, size_t want)
+// {
+//     PROFILE_FUNCTION();
+//     if (want <= s->cap)
+//         return;
+//     size_t nc = s->cap ? s->cap : 32;
+//     while (nc < want)
+//         nc *= 2;
+//     char *nb = (char *)realloc(s->buf, nc);
+//     if (!nb)
+//     {
+//         fprintf(stderr, "alloc fail\n");
+//         exit(1);
+//     }
+//     s->buf = nb;
+//     s->cap = nc;
+// }
+// static void strb_pushc(StrB *s, char c)
+// {
+//     if (s->len + 1 >= s->cap)
+//         strb_reserve(s, s->cap ? s->cap * 2 : 32);
+//     s->buf[s->len++] = c;
+// }
+// static const char *strb_cstr(StrB *s)
+// {
+//     if (s->len + 1 >= s->cap)
+//         strb_reserve(s, s->len + 2);
+//     s->buf[s->len] = '\0';
+//     return s->buf;
+// }
+// static void strb_free(StrB *s) { free(s->buf); }
 
 static double frand_unit(void) { return (double)rand() / (double)RAND_MAX; }
 
@@ -231,29 +216,21 @@ typedef struct
     double value;
 } JsonKeyValue;
 
-typedef struct
-{
-    VecHaversinePair result;
-    bool success;
-} ParseResult;
-
-static ParseResult ParseHaversineJson(Array<u8> &bytes, int expected_count)
+static Array<HaversinePair> ParseHaversineJson(Array<u8> &bytes, int expected_count = 1024)
 {
     PROFILE_FUNCTION();
-    ParseResult pr = {};
-    if (expected_count > 0)
-        pairvec_reserve(&pr.result, (size_t)expected_count + 1);
+    auto result = Array<HaversinePair>::New(expected_count);
 
     HaversineParsingState state = PS_OpenBracket;
-    StrB curKey = {}, curVal = {};
+    StringBuilder curKey = StringBuilder::New(64), curVal = StringBuilder::New(64);
 
     HaversinePair curPair = {};
     JsonKeyValue curKv = {};
 
     for (size_t i = 0; i < bytes.cap; ++i)
     {
-        Profiler::Get().AddBytes(1);
-        unsigned char b = bytes.data[i];
+        PROFILE_ADD_BANDWIDTH(1);
+        u8 b = bytes.data[i];
 
         if ((b == '\n' || b == '\t' || b == '\r' || b == ' ') && state != PS_Key)
             continue;
@@ -292,7 +269,7 @@ static ParseResult ParseHaversineJson(Array<u8> &bytes, int expected_count)
             }
             else
             {
-                strb_pushc(&curKey, (char)b);
+                curKey.Push((char)b);
             }
             break;
         }
@@ -300,7 +277,7 @@ static ParseResult ParseHaversineJson(Array<u8> &bytes, int expected_count)
         {
             if (b == ':')
             {
-                curKv.key = strb_cstr(&curKey);
+                curKv.key = curKey.ToCstr();
                 state = PS_Value;
             }
             else
@@ -313,7 +290,7 @@ static ParseResult ParseHaversineJson(Array<u8> &bytes, int expected_count)
         {
             if (b == ',' || b == '}')
             {
-                const char *val = strb_cstr(&curVal);
+                const char *val = curVal.ToCstr();
                 curKv.value = strtod(val, NULL);
 
                 if (strcmp(curKv.key, "x0") == 0)
@@ -325,14 +302,16 @@ static ParseResult ParseHaversineJson(Array<u8> &bytes, int expected_count)
                 else if (strcmp(curKv.key, "y1") == 0)
                     curPair.y1 = curKv.value;
 
-                strb_reset(&curKey);
-                strb_reset(&curVal);
+                // strb_reset(&curKey);
+                curKey.len = 0;
+                curVal.len = 0;
+                // strb_reset(&curVal);
 
                 state = (b == ',') ? PS_Comma : PS_CloseBrace;
             }
             else
             {
-                strb_pushc(&curVal, (char)b);
+                curVal.Push(b);
                 continue; // stay in Value
             }
             break;
@@ -344,14 +323,14 @@ static ParseResult ParseHaversineJson(Array<u8> &bytes, int expected_count)
         }
         case PS_CloseBrace:
         {
-            pairvec_push(&pr.result, curPair);
+            // pairvec_push(&pr.result, curPair);
+            result.Push(curPair);
             if (b == ',')
             {
                 state = PS_OpenBrace;
             }
             else if (b == ']')
             {
-                pr.success = true;
                 goto done;
             }
             else
@@ -364,7 +343,7 @@ static ParseResult ParseHaversineJson(Array<u8> &bytes, int expected_count)
     }
 
 done:
-    strb_free(&curKey);
-    strb_free(&curVal);
-    return pr;
+    // strb_free(&curKey);
+    // strb_free(&curVal);
+    return result;
 }

@@ -5,10 +5,23 @@
 
 i32 main(i32 argc, cstr *argv)
 {
-    GenerateHaversineJson(50000, "input.json");
+    Arena::Init(1024 * 1024 * 1024);
 
-    // REPETITION_PROFILE("ReadEntireFile outer w/ malloc", 5000);
-    Array<u8> file = ReadEntireFile("input.json");
-    // REPETITION_BANDWIDTH(file.cap);
-    // REPETITION_END();
+    i32 count = atoi(argc > 1 ? argv[1] : "100");
+    GenerateHaversineJson(count, "input.json");
+
+    Array<u8> file = {};
+    REPETITION_PROFILE("ReadEntireFile", 500);
+    file = ReadEntireFile("input.json");
+    REPETITION_BANDWIDTH(file.cap);
+    Arena::Clear();
+    REPETITION_END();
+
+    REPETITION_PROFILE("ParseHaversineJson", 500);
+    auto pr = ParseHaversineJson(file, count);
+    REPETITION_BANDWIDTH(file.cap);
+    Arena::Clear();
+    REPETITION_END();
+
+    return 0;
 }

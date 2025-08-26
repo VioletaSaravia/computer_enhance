@@ -65,6 +65,8 @@ struct Measurement
     u64 from, timeEx, timeInc;
 
     u64 bytesProcessed;
+
+    Measurement() {}
 };
 
 struct Profiler
@@ -84,8 +86,8 @@ struct Profiler
     u64 start;
     bool printFile;
 
-    FixedArray<Measurement, 64> measurements;
-    FixedArray<u64, 64> queue;
+    Array<Measurement> measurements;
+    Array<u64> queue;
 
     static Profiler _Profiler;
     static bool IHateCpp; // Prevents destructor from being called on init <.<
@@ -100,8 +102,8 @@ struct Profiler
             .ended = false,
             .start = ReadOSTimer(),
             .printFile = printFile,
-            .measurements = {},
-            .queue = {},
+            .measurements = Array<Measurement>::New(64),
+            .queue = Array<u64>::New(64),
         };
     }
 
@@ -197,11 +199,11 @@ struct Profiler
             }
             else
             {
-                printf(" %-20s [%lld] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f MB/s\n",
+                printf(" %-20s [%lld] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
                        next.label, next.iterations,
                        nextTimeEx, (nextTimeEx / totalTime) * 100,
                        nextTimeInc, (nextTimeInc / totalTime) * 100,
-                       f64(next.bytesProcessed) / nextTimeEx / 1024.0 / 1024.0);
+                       f64(next.bytesProcessed) / nextTimeEx / 1024.0 / 1024.0 / 1024.0);
             }
         }
     }
@@ -302,9 +304,9 @@ typedef struct RepetitionProfiler
         printf("[INFO] Finished profiler %s after %lld repeats.\n", this->name, this->repeats);
 
         f64 minTime = f64(this->min.time) / f64(GetOSTimerFreq());
-        printf("\t> Min: \t%.4f ms\t%.4f MB/s\n", minTime * 1000.0, f64(this->min.bytes) / minTime / 1024.0 / 1024.0);
+        printf("\t> Min: \t%.4f ms\t%.4f GB/s\n", minTime * 1000.0, f64(this->min.bytes) / minTime / 1024.0 / 1024.0 / 1024.0);
         f64 maxTime = f64(this->max.time) / f64(GetOSTimerFreq());
-        printf("\t> Max: \t%.4f ms\t%.4f MB/s\n", maxTime * 1000.0, f64(this->max.bytes) / maxTime / 1024.0 / 1024.0);
+        printf("\t> Max: \t%.4f ms\t%.4f GB/s\n", maxTime * 1000.0, f64(this->max.bytes) / maxTime / 1024.0 / 1024.0 / 1024.0);
 
         for (u64 i = 0; i < repeats; i++)
         {
@@ -315,14 +317,14 @@ typedef struct RepetitionProfiler
         f64 avgBytes = f64(avg.bytes) / f64(repeats);
 
         avgTime /= f64(GetOSTimerFreq());
-        printf("\t> Avg: \t%.4f ms\t%.4f MB/s\n", avgTime * 1000.0, f64(avgBytes) / avgTime / 1024.0 / 1024.0);
+        printf("\t> Avg: \t%.4f ms\t%.4f GB/s\n", avgTime * 1000.0, f64(avgBytes) / avgTime / 1024.0 / 1024.0 / 1024.0);
 
         qsort(all, repeats, sizeof(RepMeasurement), ByTime);
         f64 meanTime = all[repeats / 2].time / f64(GetOSTimerFreq());
 
         // qsort(all, repeats, sizeof(RepMeasurement), ByBytes);
         f64 meanBytes = all[repeats / 2].bytes;
-        printf("\t> Mean:\t%.4f ms\t%.4f MB/s\n", meanTime * 1000.0, f64(meanBytes) / meanTime / 1024.0 / 1024.0);
+        printf("\t> Mean:\t%.4f ms\t%.4f GB/s\n", meanTime * 1000.0, f64(meanBytes) / meanTime / 1024.0 / 1024.0 / 1024.0);
 
         printf("\n");
         free(all);

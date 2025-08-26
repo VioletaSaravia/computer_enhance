@@ -1,8 +1,12 @@
+#define ENABLE_PROFILER
+
 #include "types.h"
 #include "haversine.cpp"
 
 i32 main(i32 argc, cstr *argv)
 {
+    Arena::Init(1024 * 1024 * 1024);
+
     PROFILER_NEW("Haversine Sum");
     int pairCount = 0;
     if (argc >= 2)
@@ -26,19 +30,15 @@ i32 main(i32 argc, cstr *argv)
         fprintf(stderr, "[ERROR] Failed to read input.json\n");
         return 1;
     };
-    ParseResult pr = {};
-    pr = ParseHaversineJson(file, pairCount);
+    auto pr = ParseHaversineJson(file, pairCount);
 
-    if (!pr.success)
+    if (pr.len == 0)
     {
         fprintf(stderr, "parse failed\n");
-        free(pr.result.data);
         return 1;
     }
 
-    SumHaversines(pr.result.data, pr.result.len);
-
-    free(pr.result.data);
+    printf("Sum: %.2f\n", SumHaversines(pr.data, pr.len));
 
     return 0;
 }
