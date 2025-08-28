@@ -219,17 +219,17 @@ typedef struct
 static Array<HaversinePair> ParseHaversineJson(Array<u8> &bytes, int expected_count = 1024)
 {
     PROFILE_FUNCTION();
+    PROFILE_ADD_BANDWIDTH(bytes.cap);
     auto result = Array<HaversinePair>::New(expected_count);
 
     HaversineParsingState state = PS_OpenBracket;
-    StringBuilder curKey = StringBuilder::New(128), curVal = StringBuilder::New(128);
+    Array<u8> curKey = Array<u8>::New(128), curVal = Array<u8>::New(128);
 
     HaversinePair curPair = {};
     JsonKeyValue curKv = {};
 
     for (size_t i = 0; i < bytes.cap; ++i)
     {
-        PROFILE_ADD_BANDWIDTH(1);
         u8 b = bytes.data[i];
 
         if ((b == '\n' || b == '\t' || b == '\r' || b == ' ') && state != PS_Key)
@@ -277,7 +277,8 @@ static Array<HaversinePair> ParseHaversineJson(Array<u8> &bytes, int expected_co
         {
             if (b == ':')
             {
-                curKv.key = curKey.ToCstr();
+                curKey.Push('\0');
+                curKv.key = (cstr)curKey.data;
                 state = PS_Value;
             }
             else
@@ -290,7 +291,8 @@ static Array<HaversinePair> ParseHaversineJson(Array<u8> &bytes, int expected_co
         {
             if (b == ',' || b == '}')
             {
-                const char *val = curVal.ToCstr();
+                curKey.Push('\0');
+                const char *val = (cstr)curVal.data;
                 curKv.value = strtod(val, NULL);
 
                 if (strcmp(curKv.key, "x0") == 0)

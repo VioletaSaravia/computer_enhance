@@ -206,66 +206,6 @@ struct Array
 
 typedef Array<u8> String;
 
-struct StringBuilder
-{
-    inline static u8 Empty = {};
-
-    u8 *data;
-    u64 len, cap;
-
-    static StringBuilder New(u64 size)
-    {
-        return StringBuilder{
-            .data = Arena::PermAlloc<u8>(size),
-            .len = 0,
-            .cap = size,
-        };
-    }
-
-    void Expand()
-    {
-        printf("[INFO] Expanding array.\n");
-        // next = Arena::PermAlloc<Array<T>>();
-        // *next = Array<T>::New(cap);
-    }
-
-    void Push(const u8 &element)
-    {
-        if (len >= cap)
-        {
-            // Expand();
-            // Push(element);
-            return;
-        }
-
-        data[len] = element;
-        len++;
-    }
-
-    void Push(cstr &str)
-    {
-        for (u64 i = 0; str[i] != '\0'; i++)
-        {
-            Push(u8(str[i]));
-        }
-    }
-
-    cstr ToCstr()
-    {
-        Push('\0');
-        return cstr(data);
-    }
-
-    String ToString()
-    {
-        return String{
-            .data = data,
-            .len = len,
-            .cap = cap,
-        };
-    }
-};
-
 template <typename T, unsigned int N>
 struct FixedArray
 {
