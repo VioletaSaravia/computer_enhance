@@ -5,6 +5,7 @@
 template <int N>
 using FixedString = FixedArray<char, N>;
 
+#ifdef _WIN32
 u64 GetOSTimerFreq(void)
 {
     LARGE_INTEGER Freq;
@@ -18,6 +19,21 @@ u64 ReadOSTimer(void)
     QueryPerformanceCounter(&Value);
     return Value.QuadPart;
 }
+#else
+
+#include <time.h>
+u64 GetOSTimerFreq()
+{
+    return 1000000000ULL;
+}
+u64 ReadOSTimer()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (u64)ts.tv_sec * GetOSTimerFreq() + ts.tv_nsec;
+}
+
+#endif
 
 inline u64 ReadCPUTimer(void)
 {

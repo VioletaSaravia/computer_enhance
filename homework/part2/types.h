@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifdef _WIN32
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wall"
@@ -12,6 +13,13 @@
 #include <Windows.h>
 #ifdef __clang__
 #pragma clang diagnostic pop
+#endif
+
+#else
+
+#include <stdlib.h>
+#include <string.h>
+
 #endif
 
 typedef uint8_t u8;
