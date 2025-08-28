@@ -65,8 +65,6 @@ struct Measurement
     u64 from, timeEx, timeInc;
 
     u64 bytesProcessed;
-
-    Measurement() {}
 };
 
 struct Profiler
@@ -86,8 +84,8 @@ struct Profiler
     u64 start;
     bool printFile;
 
-    Array<Measurement> measurements;
-    Array<u64> queue;
+    FixedArray<Measurement, 64> measurements;
+    FixedArray<u64, 64> queue;
 
     static Profiler _Profiler;
     static bool IHateCpp; // Prevents destructor from being called on init <.<
@@ -102,8 +100,8 @@ struct Profiler
             .ended = false,
             .start = ReadOSTimer(),
             .printFile = printFile,
-            .measurements = Array<Measurement>::New(64),
-            .queue = Array<u64>::New(64),
+            .measurements = {},
+            .queue = {},
         };
     }
 

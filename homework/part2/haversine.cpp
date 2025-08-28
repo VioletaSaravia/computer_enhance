@@ -222,7 +222,7 @@ static Array<HaversinePair> ParseHaversineJson(Array<u8> &bytes, int expected_co
     auto result = Array<HaversinePair>::New(expected_count);
 
     HaversineParsingState state = PS_OpenBracket;
-    StringBuilder curKey = StringBuilder::New(64), curVal = StringBuilder::New(64);
+    StringBuilder curKey = StringBuilder::New(128), curVal = StringBuilder::New(128);
 
     HaversinePair curPair = {};
     JsonKeyValue curKv = {};

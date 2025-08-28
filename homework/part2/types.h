@@ -233,8 +233,8 @@ struct StringBuilder
     {
         if (len >= cap)
         {
-            Expand();
-            Push(element);
+            // Expand();
+            // Push(element);
             return;
         }
 

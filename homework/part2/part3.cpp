@@ -7,7 +7,7 @@ i32 main(i32 argc, cstr *argv)
 {
     Arena::Init(1024 * 1024 * 1024);
 
-    i32 count = atoi(argc > 1 ? argv[1] : "100");
+    i32 count = atoi(argc > 1 ? argv[1] : "1000000");
     GenerateHaversineJson(count, "input.json");
 
     Array<u8> file = {};
