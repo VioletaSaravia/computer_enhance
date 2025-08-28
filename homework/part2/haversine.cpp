@@ -7,10 +7,9 @@ Array<u8> ReadEntireFile(const char *path)
 {
     PROFILE_FUNCTION();
 
-    FILE *f = {};
     u64 rd = 0;
 
-    fopen_s(&f, path, "rb");
+    FILE *f = fopen(path, "rb");
     if (!f)
     {
         fclose(f);
@@ -156,8 +155,7 @@ static void GenerateHaversineJson(int count, const char *path)
 {
     PROFILE_FUNCTION();
 
-    FILE *f = {};
-    fopen_s(&f, path, "wb");
+    FILE *f = fopen(path, "wb");
     if (!f)
     {
         fprintf(stderr, "open %s failed\n", path);

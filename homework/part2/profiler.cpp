@@ -206,14 +206,14 @@ struct Profiler
             f64 nextTimeInc = (f64(next.timeInc) / f64(GetOSTimerFreq()));
             if (next.bytesProcessed == 0)
             {
-                printf(" %-20s [%lld] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
+                printf(" %-20s [%lu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
                        next.label, next.iterations,
                        nextTimeEx, (nextTimeEx / totalTime) * 100,
                        nextTimeInc, (nextTimeInc / totalTime) * 100);
             }
             else
             {
-                printf(" %-20s [%lld] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
+                printf(" %-20s [%lu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
                        next.label, next.iterations,
                        nextTimeEx, (nextTimeEx / totalTime) * 100,
                        nextTimeInc, (nextTimeInc / totalTime) * 100,
@@ -315,7 +315,7 @@ typedef struct RepetitionProfiler
 
     ~RepetitionProfiler()
     {
-        printf("[INFO] Finished profiler %s after %lld repeats.\n", this->name, this->repeats);
+        printf("[INFO] Finished profiler %s after %lu repeats.\n", this->name, this->repeats);
 
         f64 minTime = f64(this->min.time) / f64(GetOSTimerFreq());
         printf("\t> Min: \t%.4f ms\t%.4f GB/s\n", minTime * 1000.0, f64(this->min.bytes) / minTime / 1024.0 / 1024.0 / 1024.0);
