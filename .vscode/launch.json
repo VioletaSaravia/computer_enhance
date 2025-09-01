@@ -7,13 +7,13 @@
             "name": "Run Odin File",
             "args": [],
             "cwd": "${fileDirname}",
-            "program": "${fileDirname}/${fileBasenameNoExtension}.exe"
+            "program": "${fileDirname}/build/${fileBasenameNoExtension}.exe"
         },
         {
             "name": "C/C++: cl.exe build and debug active file",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${fileDirname}\\${fileBasenameNoExtension}_release.exe",
+            "program": "${fileDirname}\\build\\${fileBasenameNoExtension}_release.exe",
             "args": [
                 "${inputs:num}"
             ],
@@ -22,13 +22,39 @@
             "environment": [],
             "console": "integratedTerminal",
             "preLaunchTask": "C/C++: cl.exe Release build active file"
+        },
+        {
+            "name": "C/C++: clang++ build and debug active file",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${fileDirname}/build/${fileBasenameNoExtension}.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "miDebuggerPath": "lldb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "C/C++: clang++ build active file"
         }
     ],
     "inputs": [
         {
             "id": "num",
             "description": "num",
-            "type": "promptString",
+            "type": "promptString"
         }
     ]
 }

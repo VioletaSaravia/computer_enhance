@@ -1,163 +1,91 @@
-#include "types.h"
 #include "profiler.cpp"
 
-#include <math.h>
+struct File {
+    FILE* data;
 
-Array<u8> ReadEntireFile(const char *path)
-{
+#ifdef DEBUG
+    cstr path;
+    u64  modTime;
+#endif
+
+#ifdef DEBUG
+    File(cstr _path, cstr _mode) : data{fopen(_path, _mode)}, path{_path}, modTime{0} {}
+#else
+    File(cstr _path, cstr _mode) : data{fopen(_path, _mode)} {}
+#endif
+
+    ~File() { fclose(data); }
+
+    operator FILE*() { return data; }
+};
+
+Array<u8> ReadEntireFile(const char* path) {
     PROFILE_FUNCTION();
 
     u64 rd = 0;
 
-    FILE *f = fopen(path, "rb");
-    if (!f)
-    {
+    File f(path, "rb");
+    // FILE* f = fopen(path, "rb");
+    if (!f) {
         fclose(f);
         return {};
     }
 
-    if (fseek(f, 0, SEEK_END) != 0)
-        return {};
+    if (fseek(f, 0, SEEK_END) != 0) return {};
 
     u64 cap = ftell(f);
+    if (cap == 0) return {}; // == ?
     PROFILE_ADD_BANDWIDTH(cap);
+
     auto result = Array<u8>::New(cap);
+    if (!result.data) return {};
     result.len = result.cap;
 
-    if (result.cap < 0)
-        return {};
-
     rewind(f);
-    if (!result.data)
-        return {};
-
     rd = fread(result.data, 1, (u64)result.cap, f);
     fclose(f);
-    f = 0;
-    if (rd != (u64)result.cap)
-        return {};
+    f.data = 0;
+    if (rd != (u64)result.cap) return {};
 
     return result;
 }
 
-typedef struct
-{
+typedef struct {
     double x0, y0, x1, y1;
 } HaversinePair;
 
-static double Haversine(HaversinePair p, double radius)
-{
+double Haversine(HaversinePair p, double radius) {
     const double dLat = Deg2Rad(p.y1 - p.y0);
     const double dLon = Deg2Rad(p.x1 - p.x0);
     const double lat1 = Deg2Rad(p.y0);
     const double lat2 = Deg2Rad(p.y1);
 
-    const double a = pow(sin(dLat * 0.5), 2.0) +
-                     cos(lat1) * cos(lat2) * pow(sin(dLon * 0.5), 2.0);
+    const double a = pow(sin(dLat * 0.5), 2.0) + cos(lat1) * cos(lat2) * pow(sin(dLon * 0.5), 2.0);
     const double c = 2.0 * asin(sqrt(a));
     return radius * c;
 }
 
-static double SumHaversines(const HaversinePair *pairs, size_t n)
-{
+double SumHaversines(Handle<HaversinePair> pairs, size_t n) {
     PROFILE_FUNCTION();
-    if (n == 0)
-        return 0.0;
+    if (n == 0) return 0.0;
     const double coef = 1.0 / (double)n;
-    double sum = 0.0;
-    for (size_t i = 0; i < n; ++i)
-    {
+    double       sum  = 0.0;
+    for (size_t i = 0; i < n; ++i) {
         PROFILE_ADD_BANDWIDTH(sizeof(HaversinePair));
         sum += coef * Haversine(pairs[i], 6372.8);
     }
     return sum;
 }
 
-// #define VEC(type)   \
-//     typedef struct  \
-//     {               \
-//         type *data; \
-//         size_t len; \
-//         size_t cap; \
-//     } Vec##type
+static double frand_unit(void) {
+    return (double)rand() / (double)RAND_MAX;
+}
 
-// VEC(HaversinePair);
-
-// static void pairvec_reserve(VecHaversinePair *v, size_t want)
-// {
-//     if (want <= v->cap)
-//         return;
-//     size_t new_cap = v->cap ? v->cap : 16;
-//     while (new_cap < want)
-//         new_cap *= 2;
-//     HaversinePair *nd = (HaversinePair *)realloc(v->data, new_cap * sizeof(*nd));
-//     if (!nd)
-//     {
-//         fprintf(stderr, "alloc fail\n");
-//         exit(1);
-//     }
-//     v->data = nd;
-//     v->cap = new_cap;
-// }
-// static void pairvec_push(VecHaversinePair *v, HaversinePair p)
-// {
-//     PROFILE_FUNCTION();
-//     if (v->len == v->cap)
-//         pairvec_reserve(v, v->cap ? v->cap * 2 : 16);
-//     v->data[v->len++] = p;
-// }
-
-/* ---------- tiny string builder ---------- */
-
-// typedef struct
-// {
-//     char *buf;
-//     size_t len;
-//     size_t cap;
-// } StrB;
-
-// static void strb_reset(StrB *s) { s->len = 0; }
-// static void strb_reserve(StrB *s, size_t want)
-// {
-//     PROFILE_FUNCTION();
-//     if (want <= s->cap)
-//         return;
-//     size_t nc = s->cap ? s->cap : 32;
-//     while (nc < want)
-//         nc *= 2;
-//     char *nb = (char *)realloc(s->buf, nc);
-//     if (!nb)
-//     {
-//         fprintf(stderr, "alloc fail\n");
-//         exit(1);
-//     }
-//     s->buf = nb;
-//     s->cap = nc;
-// }
-// static void strb_pushc(StrB *s, char c)
-// {
-//     if (s->len + 1 >= s->cap)
-//         strb_reserve(s, s->cap ? s->cap * 2 : 32);
-//     s->buf[s->len++] = c;
-// }
-// static const char *strb_cstr(StrB *s)
-// {
-//     if (s->len + 1 >= s->cap)
-//         strb_reserve(s, s->len + 2);
-//     s->buf[s->len] = '\0';
-//     return s->buf;
-// }
-// static void strb_free(StrB *s) { free(s->buf); }
-
-static double frand_unit(void) { return (double)rand() / (double)RAND_MAX; }
-
-static void GenerateHaversineJson(int count, const char *path)
-{
+static void GenerateHaversineJson(int count, const char* path) {
     PROFILE_FUNCTION();
 
-    FILE *f = fopen(path, "wb");
-    if (!f)
-    {
+    FILE* f = fopen(path, "wb");
+    if (!f) {
         fprintf(stderr, "open %s failed\n", path);
         exit(1);
     }
@@ -165,8 +93,7 @@ static void GenerateHaversineJson(int count, const char *path)
     fputs("[\n", f);
     char buf[64];
 
-    for (int i = 0; i < count; ++i)
-    {
+    for (int i = 0; i < count; ++i) {
         PROFILE_ADD_BANDWIDTH(3 + 6 + 6 + 6 + 6 + 4);
         fputs("\t{\n", f);
 
@@ -187,8 +114,7 @@ static void GenerateHaversineJson(int count, const char *path)
         fputs(buf, f);
 
         fputs("\t}", f);
-        if (i + 1 != count)
-            fputc(',', f);
+        if (i + 1 != count) fputc(',', f);
         fputc('\n', f);
     }
     fputs("]\n", f);
@@ -196,8 +122,7 @@ static void GenerateHaversineJson(int count, const char *path)
     fclose(f);
 }
 
-typedef enum
-{
+typedef enum {
     PS_OpenBracket,
     PS_OpenBrace,
     PS_KeyStart,
@@ -208,90 +133,72 @@ typedef enum
     PS_CloseBrace
 } HaversineParsingState;
 
-typedef struct
-{
-    const char *key;
-    double value;
+typedef struct {
+    const char* key;
+    double      value;
 } JsonKeyValue;
 
-static Array<HaversinePair> ParseHaversineJson(Array<u8> &bytes, int expected_count = 1024)
-{
+static Array<HaversinePair> ParseHaversineJson(Array<u8>& bytes, int expected_count = 1024) {
     PROFILE_FUNCTION();
     PROFILE_ADD_BANDWIDTH(bytes.cap);
     auto result = Array<HaversinePair>::New(expected_count);
 
-    HaversineParsingState state = PS_OpenBracket;
-    Array<u8> curKey = Array<u8>::New(128), curVal = Array<u8>::New(128);
+    HaversineParsingState state  = PS_OpenBracket;
+    Array<u8>             curKey = Array<u8>::New(128), curVal = Array<u8>::New(128);
 
     HaversinePair curPair = {};
-    JsonKeyValue curKv = {};
+    JsonKeyValue  curKv   = {};
 
-    for (size_t i = 0; i < bytes.cap; ++i)
-    {
+    for (size_t i = 0; i < bytes.cap; ++i) {
         u8 b = bytes.data[i];
 
-        if ((b == '\n' || b == '\t' || b == '\r' || b == ' ') && state != PS_Key)
-            continue;
+        if ((b == '\n' || b == '\t' || b == '\r' || b == ' ') && state != PS_Key) continue;
 
-        switch (state)
-        {
-        case PS_OpenBracket:
-        {
+        switch (state) {
+        case PS_OpenBracket: {
             if (b != '[')
-                goto done;
+                return result;
             else
                 state = PS_OpenBrace;
             break;
         }
-        case PS_OpenBrace:
-        {
+        case PS_OpenBrace: {
             if (b != '{')
-                goto done;
+                return result;
             else
                 state = PS_KeyStart;
             break;
         }
-        case PS_KeyStart:
-        {
+        case PS_KeyStart: {
             if (b != '\"')
-                goto done;
+                return result;
             else
                 state = PS_Key;
             break;
         }
-        case PS_Key:
-        {
-            if (b == '\"')
-            {
+        case PS_Key: {
+            if (b == '\"') {
                 state = PS_Colon;
-            }
-            else
-            {
+            } else {
                 curKey.Push((char)b);
             }
             break;
         }
-        case PS_Colon:
-        {
-            if (b == ':')
-            {
+        case PS_Colon: {
+            if (b == ':') {
                 curKey.Push('\0');
-                curKv.key = (cstr)curKey.data;
-                state = PS_Value;
-            }
-            else
-            {
-                goto done;
+                curKv.key = (cstr) & (*curKey.data);
+                state     = PS_Value;
+            } else {
+                return result;
             }
             break;
         }
-        case PS_Value:
-        {
-            if (b == ',' || b == '}')
-            {
+        case PS_Value: {
+            if (b == ',' || b == '}') {
                 curKey.Push('\0');
-                const char *val = (cstr)curVal.data;
-                curKv.value = strtod(val, NULL);
+                const char* val = (cstr) & (*curVal.data);
+                curKv.value     = strtod(val, NULL);
 
                 if (strcmp(curKv.key, "x0") == 0)
                     curPair.x0 = curKv.value;
@@ -302,48 +209,33 @@ static Array<HaversinePair> ParseHaversineJson(Array<u8> &bytes, int expected_co
                 else if (strcmp(curKv.key, "y1") == 0)
                     curPair.y1 = curKv.value;
 
-                // strb_reset(&curKey);
                 curKey.len = 0;
                 curVal.len = 0;
-                // strb_reset(&curVal);
 
                 state = (b == ',') ? PS_Comma : PS_CloseBrace;
-            }
-            else
-            {
+            } else {
                 curVal.Push(b);
                 continue; // stay in Value
             }
             break;
         }
-        case PS_Comma:
-        {
+        case PS_Comma: {
             state = (b == '\"') ? PS_Key : PS_Value;
             break;
         }
-        case PS_CloseBrace:
-        {
-            // pairvec_push(&pr.result, curPair);
+        case PS_CloseBrace: {
             result.Push(curPair);
-            if (b == ',')
-            {
+            if (b == ',') {
                 state = PS_OpenBrace;
-            }
-            else if (b == ']')
-            {
-                goto done;
-            }
-            else
-            {
-                goto done;
+            } else if (b == ']') {
+                return result;
+            } else {
+                return result;
             }
             break;
         }
         }
     }
 
-done:
-    // strb_free(&curKey);
-    // strb_free(&curVal);
     return result;
 }

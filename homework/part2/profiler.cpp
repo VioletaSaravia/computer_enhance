@@ -1,33 +1,36 @@
 #include <stdio.h>
 
-#include "types.h"
-
-template <int N>
-using FixedString = FixedArray<char, N>;
+#include "types.hpp"
 
 #ifdef _WIN32
-u64 GetOSTimerFreq(void)
-{
-    LARGE_INTEGER Freq;
-    QueryPerformanceFrequency(&Freq);
-    return Freq.QuadPart;
+
+u64 GetOSTimerFreq(void) {
+    LARGE_INTEGER Freq = {};
+
+    bool ok = QueryPerformanceFrequency(&Freq);
+    if (!ok) printf("[ERROR] Couldn't obtain OS timer frequency\n");
+
+    return ok ? Freq.QuadPart : 0;
 }
 
-u64 ReadOSTimer(void)
-{
-    LARGE_INTEGER Value;
-    QueryPerformanceCounter(&Value);
-    return Value.QuadPart;
+u64 ReadOSTimer(void) {
+    LARGE_INTEGER Value = {};
+
+    bool ok = QueryPerformanceCounter(&Value);
+    if (!ok) printf("[ERROR] Couldn't obtain OS timer\n");
+
+    return ok ? Value.QuadPart : 0;
 }
+
 #else
 
 #include <time.h>
-u64 GetOSTimerFreq()
-{
+
+u64 GetOSTimerFreq() {
     return 1000000000ULL;
 }
-u64 ReadOSTimer()
-{
+
+u64 ReadOSTimer() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (u64)ts.tv_sec * GetOSTimerFreq() + ts.tv_nsec;
@@ -35,17 +38,28 @@ u64 ReadOSTimer()
 
 #endif
 
-inline u64 ReadCPUTimer(void)
-{
-    // NOTE(casey): If you were on ARM, you would need to replace __rdtsc
-    // with one of their performance counter read instructions, depending
-    // on which ones are available on your platform.
-
+inline u64 ReadCPUTimer(void) {
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64) || defined(__i386__) || defined(_M_IX86)
     return __rdtsc();
+
+#elif defined(__aarch64__)
+    // ARMv8 (AArch64): use CNTVCT_EL0
+    uint64_t cnt;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(cnt));
+    return cnt;
+
+#elif defined(__arm__)
+    // ARMv7-A: use PMCCNTR (if enabled)
+    uint32_t cc;
+    __asm__ volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(cc));
+    return (uint64_t)cc;
+
+#else
+#error "Unsupported architecture"
+#endif
 }
 
-u64 EstimateCPUTimerFreq(void)
-{
+u64 EstimateCPUTimerFreq(void) {
     u64 MillisecondsToWait = 100;
     u64 OSFreq = GetOSTimerFreq();
 
@@ -54,8 +68,7 @@ u64 EstimateCPUTimerFreq(void)
     u64 OSEnd = 0;
     u64 OSElapsed = 0;
     u64 OSWaitTime = OSFreq * MillisecondsToWait / 1000;
-    while (OSElapsed < OSWaitTime)
-    {
+    while (OSElapsed < OSWaitTime) {
         OSEnd = ReadOSTimer();
         OSElapsed = OSEnd - OSStart;
     }
@@ -64,16 +77,14 @@ u64 EstimateCPUTimerFreq(void)
     u64 CPUElapsed = CPUEnd - CPUStart;
 
     u64 CPUFreq = 0;
-    if (OSElapsed)
-    {
+    if (OSElapsed) {
         CPUFreq = OSFreq * CPUElapsed / OSElapsed;
     }
 
     return CPUFreq;
 };
 
-struct Measurement
-{
+struct Block {
     cstr label, file;
     i32 line;
 
@@ -83,14 +94,14 @@ struct Measurement
     u64 bytesProcessed;
 };
 
-struct Profiler
-{
+#ifndef MAX_BLOCKS
+#define MAX_BLOCKS 64
+#endif
 
-    struct BlockFlag
-    {
-        Profiler *parent;
-        ~BlockFlag()
-        {
+struct Profiler {
+    struct BlockFlag {
+        Profiler* parent;
+        ~BlockFlag() {
             parent->EndBlock();
         }
     };
@@ -98,42 +109,36 @@ struct Profiler
     cstr name;
     bool ended;
     u64 start;
-    bool printFile;
 
-    FixedArray<Measurement, 64> measurements;
-    FixedArray<u64, 64> queue;
+    FixedArray<Block, MAX_BLOCKS> blocks;
+    FixedArray<u64, MAX_BLOCKS> queue;
 
     static Profiler _Profiler;
-    static bool IHateCpp; // Prevents destructor from being called on init <.<
-    static Profiler &Get()
-    {
+    static bool Initialized; // Prevents destructor from being called on init <.<
+    static Profiler& Get() {
         return Profiler::_Profiler;
     }
-    static void New(cstr name = "", bool printFile = false)
-    {
+
+    static void New(cstr name = "") {
         Profiler::_Profiler = Profiler{
             .name = name,
             .ended = false,
             .start = ReadOSTimer(),
-            .printFile = printFile,
-            .measurements = {},
+            .blocks = {},
             .queue = {},
         };
     }
 
-    void BeginBlock(u64 id, cstr label = "", cstr file = "", i32 line = 0, u64 bytesProcessed = 0)
-    {
-        if (id >= measurements.cap)
-        {
+    void BeginBlock(u64 id, cstr label = "", cstr file = "", i32 line = 0, u64 bytesProcessed = 0) {
+        if (id >= blocks.cap) {
             return;
         }
 
-        Measurement *m = &measurements[id];
+        Block* m = &blocks[id];
         u64 time = ReadOSTimer();
 
-        if (queue.len > 0)
-        {
-            Measurement *prev = &measurements[queue.Last()];
+        if (queue.len > 0) {
+            Block* prev = &blocks[queue.Last()];
             prev->timeEx += time - prev->from;
             prev->timeInc += time - prev->from;
         }
@@ -151,69 +156,55 @@ struct Profiler
         return;
     }
 
-    void AddBytes(u64 bytes)
-    {
-        measurements[queue.Last()].bytesProcessed += bytes;
+    void AddBytes(u64 bytes) {
+        blocks[queue.Last()].bytesProcessed += bytes;
     }
 
-    BlockFlag BeginScopeBlock(i32 id, cstr label, cstr file = "", i32 line = 0, u64 bytesProcessed = 0)
-    {
+    BlockFlag BeginScopeBlock(i32 id, cstr label, cstr file = "", i32 line = 0, u64 bytesProcessed = 0) {
         BeginBlock(id, label, file, line, bytesProcessed);
         return BlockFlag{.parent = this};
     }
 
-    void EndBlock()
-    {
+    void EndBlock() {
         u64 now = ReadOSTimer();
 
-        Measurement *m = &measurements[queue.Pop()];
+        Block* m = &blocks[queue.Pop()];
         m->timeEx += now - m->from;
         m->timeInc += now - m->from;
 
-        if (queue.len > 0)
-        {
-            // TODO rodata in [] so this check is unnecesary
-            Measurement *prev = &measurements[queue.Last()];
+        if (queue.len > 0) {
+            // TODO: rodata in [] so this check is unnecesary
+            Block* prev = &blocks[queue.Last()];
             prev->from = now;
             prev->timeInc += now - m->from;
         }
     }
 
-    void End()
-    {
-        if (!ended)
-        {
-            ended = true;
-            IHateCpp = false;
-        }
-        else
-        {
-            return;
-        }
+    void End() {
+        if (ended) return;
+
+        ended = true;
+        Initialized = false;
 
         f64 totalTime = f64(ReadOSTimer() - start) / f64(GetOSTimerFreq());
         printf("[INFO] Finished profiler %s in %.6f seconds\n", name, totalTime);
         printf(" %-24s \t| %-25s \t| %-25s \t| %-12s\n", "Name[n]", "Time (Ex)", "Time (Inc)", "Bandwidth");
         printf("---------------------------------------------------------------------------------------------------------------\n");
 
-        for (u64 i = 1; i < measurements.cap; i++)
-        {
-            auto next = measurements[i];
+        for (u64 i = 1; i < blocks.cap; i++) {
+            auto next = blocks[i];
             if (next.iterations == 0)
                 continue;
 
             f64 nextTimeEx = (f64(next.timeEx) / f64(GetOSTimerFreq()));
             f64 nextTimeInc = (f64(next.timeInc) / f64(GetOSTimerFreq()));
-            if (next.bytesProcessed == 0)
-            {
-                printf(" %-20s [%lu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
+            if (next.bytesProcessed == 0) {
+                printf(" %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
                        next.label, next.iterations,
                        nextTimeEx, (nextTimeEx / totalTime) * 100,
                        nextTimeInc, (nextTimeInc / totalTime) * 100);
-            }
-            else
-            {
-                printf(" %-20s [%lu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
+            } else {
+                printf(" %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
                        next.label, next.iterations,
                        nextTimeEx, (nextTimeEx / totalTime) * 100,
                        nextTimeInc, (nextTimeInc / totalTime) * 100,
@@ -222,11 +213,9 @@ struct Profiler
         }
     }
 
-    ~Profiler()
-    {
-        if (!IHateCpp)
-        {
-            IHateCpp = true;
+    ~Profiler() {
+        if (!Initialized) {
+            Initialized = true;
             return;
         }
         if (start != 0)
@@ -234,77 +223,59 @@ struct Profiler
     }
 };
 
-Profiler Profiler::_Profiler{};
-bool Profiler::IHateCpp{};
+Profiler Profiler::_Profiler = {};
+bool Profiler::Initialized = false;
 
-typedef enum
-{
-    None
-} RepType;
-
-typedef struct
-{
+typedef struct {
     u64 time, bytes;
-} RepMeasurement;
+} RepBlock;
 
-extern "C"
-{
-    i32 ByTime(const void *from, const void *to)
-    {
-        return ((RepMeasurement *)(from))->time - ((RepMeasurement *)(to))->time;
-    }
-
-    i32 ByBytes(const void *from, const void *to)
-    {
-        return ((RepMeasurement *)(from))->bytes - ((RepMeasurement *)(to))->bytes;
-    }
+extern "C" {
+i32 ByTime(const void* from, const void* to) {
+    return ((RepBlock*)(from))->time - ((RepBlock*)(to))->time;
 }
 
-typedef struct RepetitionProfiler
-{
+i32 ByBytes(const void* from, const void* to) {
+    return ((RepBlock*)(from))->bytes - ((RepBlock*)(to))->bytes;
+}
+}
+
+struct RepetitionProfiler {
     cstr name;
 
-    RepMeasurement min, max, avg, current;
-    RepMeasurement *all;
+    RepBlock min, max, avg, current;
+    RepBlock* all;
     u64 repeats, maxRepeats;
-    RepType type;
 
-    static RepetitionProfiler New(cstr name, u64 maxRepeats = 1000)
-    {
+    static RepetitionProfiler New(cstr name, u64 maxRepeats = 1000) {
         return RepetitionProfiler{
             .name = name,
             .min = {},
             .max = {},
             .avg = {},
             .current = {},
-            .all = (RepMeasurement *)malloc(sizeof(RepMeasurement) * maxRepeats),
+            .all = (RepBlock*)malloc(sizeof(RepBlock) * maxRepeats),
             .repeats = 0,
             .maxRepeats = maxRepeats,
-            .type = ::None,
         };
     }
 
-    void BeginRep()
-    {
+    void BeginRep() {
         this->current.time = ReadOSTimer();
     }
 
-    void AddBytes(u64 bytes)
-    {
+    void AddBytes(u64 bytes) {
         this->current.bytes += bytes;
     }
 
-    void EndRep()
-    {
+    void EndRep() {
         this->current.time = ReadOSTimer() - this->current.time;
 
-        if (this->current.time < this->min.time || this->min.time == 0)
-        {
+        if (this->current.time < this->min.time || this->min.time == 0) {
             this->min = this->current;
         }
 
-        if (this->current.time > this->max.time || this->max.time == 0)
-        {
+        if (this->current.time > this->max.time || this->max.time == 0) {
             this->max = this->current;
         }
 
@@ -313,17 +284,15 @@ typedef struct RepetitionProfiler
         this->current = {};
     }
 
-    ~RepetitionProfiler()
-    {
-        printf("[INFO] Finished profiler %s after %lu repeats.\n", this->name, this->repeats);
+    ~RepetitionProfiler() {
+        printf("[INFO] Finished profiler %s after %llu repeats.\n", this->name, this->repeats);
 
         f64 minTime = f64(this->min.time) / f64(GetOSTimerFreq());
         printf("\t> Min: \t%.4f ms\t%.4f GB/s\n", minTime * 1000.0, f64(this->min.bytes) / minTime / 1024.0 / 1024.0 / 1024.0);
         f64 maxTime = f64(this->max.time) / f64(GetOSTimerFreq());
         printf("\t> Max: \t%.4f ms\t%.4f GB/s\n", maxTime * 1000.0, f64(this->max.bytes) / maxTime / 1024.0 / 1024.0 / 1024.0);
 
-        for (u64 i = 0; i < repeats; i++)
-        {
+        for (u64 i = 0; i < repeats; i++) {
             this->avg.time += all[i].time;
             this->avg.bytes += all[i].bytes;
         }
@@ -333,17 +302,17 @@ typedef struct RepetitionProfiler
         avgTime /= f64(GetOSTimerFreq());
         printf("\t> Avg: \t%.4f ms\t%.4f GB/s\n", avgTime * 1000.0, f64(avgBytes) / avgTime / 1024.0 / 1024.0 / 1024.0);
 
-        qsort(all, repeats, sizeof(RepMeasurement), ByTime);
+        qsort(all, repeats, sizeof(RepBlock), ByTime);
         f64 meanTime = all[repeats / 2].time / f64(GetOSTimerFreq());
 
-        // qsort(all, repeats, sizeof(RepMeasurement), ByBytes);
+        // qsort(all, repeats, sizeof(RepBlock), ByBytes);
         f64 meanBytes = all[repeats / 2].bytes;
         printf("\t> Mean:\t%.4f ms\t%.4f GB/s\n", meanTime * 1000.0, f64(meanBytes) / meanTime / 1024.0 / 1024.0 / 1024.0);
 
         printf("\n");
         free(all);
     }
-} RepetitionProfiler;
+};
 
 #ifdef ENABLE_PROFILER
 
@@ -360,11 +329,9 @@ typedef struct RepetitionProfiler
     Profiler::Get().EndBlock();
 
 #define REPETITION_PROFILE(name, count)                        \
-    do                                                         \
-    {                                                          \
+    do {                                                       \
         auto _profiler = RepetitionProfiler::New(name, count); \
-        while (_profiler.repeats < _profiler.maxRepeats)       \
-        {                                                      \
+        while (_profiler.repeats < _profiler.maxRepeats) {     \
             _profiler.BeginRep();
 
 #define REPETITION_BANDWIDTH(bytes) _profiler.AddBytes(bytes)
@@ -373,22 +340,21 @@ typedef struct RepetitionProfiler
     _profiler.EndRep();  \
     }                    \
     }                    \
-    while (0)            \
-        ;
+    while (0);
 
 #else
 
-#define PROFILER_NEW(name)
-#define PROFILER_END()
-#define PROFILE_BLOCK_BEGIN(name)
-#define PROFILE_ADD_BANDWIDTH(bytes)
-#define PROFILE_BLOCK_END()
-#define PROFILE_SCOPE(name)
-#define PROFILE_FUNCTION()
+#define PROFILER_NEW(...)
+#define PROFILER_END(...)
+#define PROFILE_BLOCK_BEGIN(...)
+#define PROFILE_ADD_BANDWIDTH(...)
+#define PROFILE_BLOCK_END(...)
+#define PROFILE_SCOPE(...)
+#define PROFILE_FUNCTION(...)
 #define PROFILE(name, code) code
 
-#define REPETITION_PROFILE(name, count)
-#define REPETITION_BANDWIDTH(bytes)
-#define REPETITION_END()
+#define REPETITION_PROFILE(...)
+#define REPETITION_BANDWIDTH(...)
+#define REPETITION_END(...)
 
 #endif

@@ -2,6 +2,13 @@
     "files.associations": {
         "cstdlib": "c",
         "stdint.h": "c",
-        "cmath": "cpp"
+        "cmath": "cpp",
+        "profiler.h": "c",
+        "types.h": "c",
+        "cstddef": "c",
+        "type_traits": "c",
+        "stdio.h": "c",
+        "assert.h": "c",
+        "xtr1common": "cpp"
     }
 }
