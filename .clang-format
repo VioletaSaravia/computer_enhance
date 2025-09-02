@@ -34,7 +34,7 @@ SpacesInParentheses: false
 SpaceInEmptyParentheses: false
 
 # Other common options
-ColumnLimit: 100
+ColumnLimit: 120
 BreakBeforeBinaryOperators: None
 DerivePointerAlignment: false
 PointerAlignment: Left

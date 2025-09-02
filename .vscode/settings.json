@@ -9,6 +9,11 @@
         "type_traits": "c",
         "stdio.h": "c",
         "assert.h": "c",
-        "xtr1common": "cpp"
+        "xtr1common": "cpp",
+        "concepts": "cpp",
+        "cstdint": "cpp",
+        "cstdio": "cpp",
+        "cstring": "cpp",
+        "types.hpp": "c"
     }
 }

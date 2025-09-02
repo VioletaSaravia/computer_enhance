@@ -1,7 +1,7 @@
-#define ENABLE_PROFILER
+#define ENABLE_PROFILER 1
 
-#include "haversine.cpp"
-#include "types.hpp"
+#include "graphics.hpp"
+#include "haversine.hpp"
 
 i32 main(i32 argc, cstr* argv) {
     PROFILER_NEW("Haversine Sum");
@@ -18,11 +18,9 @@ i32 main(i32 argc, cstr* argv) {
 
     GenerateHaversineJson(pairCount, "input.json");
 
-    Array<u8> file = ReadEntireFile("input.json");
-    if (!file.data) {
-        fprintf(stderr, "[ERROR] Failed to read input.json\n");
-        return 1;
-    };
+    auto file = ReadEntireFile("input.json");
+    if (!file.ok) return 1;
+
     auto pr = ParseHaversineJson(file, pairCount);
 
     if (pr.len == 0) {
@@ -30,7 +28,7 @@ i32 main(i32 argc, cstr* argv) {
         return 1;
     }
 
-    printf("Sum: %.2f\n", SumHaversines(pr.data, pr.len));
+    printf("Sum: %.2f\n", SumHaversines(pr));
 
     return 0;
 }

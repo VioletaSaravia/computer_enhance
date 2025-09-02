@@ -1,87 +1,39 @@
-#include "profiler.cpp"
+#pragma once
 
-struct File {
-    FILE* data;
-
-#ifdef DEBUG
-    cstr path;
-    u64  modTime;
-#endif
-
-#ifdef DEBUG
-    File(cstr _path, cstr _mode) : data{fopen(_path, _mode)}, path{_path}, modTime{0} {}
-#else
-    File(cstr _path, cstr _mode) : data{fopen(_path, _mode)} {}
-#endif
-
-    ~File() { fclose(data); }
-
-    operator FILE*() { return data; }
-};
-
-Array<u8> ReadEntireFile(const char* path) {
-    PROFILE_FUNCTION();
-
-    u64 rd = 0;
-
-    File f(path, "rb");
-    // FILE* f = fopen(path, "rb");
-    if (!f) {
-        fclose(f);
-        return {};
-    }
-
-    if (fseek(f, 0, SEEK_END) != 0) return {};
-
-    u64 cap = ftell(f);
-    if (cap == 0) return {}; // == ?
-    PROFILE_ADD_BANDWIDTH(cap);
-
-    auto result = Array<u8>::New(cap);
-    if (!result.data) return {};
-    result.len = result.cap;
-
-    rewind(f);
-    rd = fread(result.data, 1, (u64)result.cap, f);
-    fclose(f);
-    f.data = 0;
-    if (rd != (u64)result.cap) return {};
-
-    return result;
-}
+#include "io.hpp"
 
 typedef struct {
-    double x0, y0, x1, y1;
+    f64 x0, y0, x1, y1;
 } HaversinePair;
 
-double Haversine(HaversinePair p, double radius) {
-    const double dLat = Deg2Rad(p.y1 - p.y0);
-    const double dLon = Deg2Rad(p.x1 - p.x0);
-    const double lat1 = Deg2Rad(p.y0);
-    const double lat2 = Deg2Rad(p.y1);
+f64 Haversine(HaversinePair p, f64 radius) {
+    const Rad dLat = Deg(p.y1 - p.y0);
+    const Rad dLon = Deg(p.x1 - p.x0);
+    const Rad lat1 = Deg(p.y0);
+    const Rad lat2 = Deg(p.y1);
 
-    const double a = pow(sin(dLat * 0.5), 2.0) + cos(lat1) * cos(lat2) * pow(sin(dLon * 0.5), 2.0);
-    const double c = 2.0 * asin(sqrt(a));
+    const f64 a = pow(sin(f32(dLat) * 0.5f), 2.0) + cos(f32(lat1)) * cos(f32(lat2)) * pow(sin(f32(dLon) * 0.5f), 2.0f);
+    const f64 c = 2.0 * asin(sqrt(a));
     return radius * c;
 }
 
-double SumHaversines(Handle<HaversinePair> pairs, size_t n) {
+f64 SumHaversines(Array<HaversinePair> pairs) {
     PROFILE_FUNCTION();
-    if (n == 0) return 0.0;
-    const double coef = 1.0 / (double)n;
-    double       sum  = 0.0;
-    for (size_t i = 0; i < n; ++i) {
+    if (pairs.len == 0) return 0.0;
+    const f64 coef = 1.0 / (f64)pairs.len;
+    f64       sum  = 0.0;
+    for (size_t i = 0; i < pairs.len; ++i) {
         PROFILE_ADD_BANDWIDTH(sizeof(HaversinePair));
         sum += coef * Haversine(pairs[i], 6372.8);
     }
     return sum;
 }
 
-static double frand_unit(void) {
-    return (double)rand() / (double)RAND_MAX;
+static f64 frand_unit() {
+    return (f64)rand() / (f64)RAND_MAX;
 }
 
-static void GenerateHaversineJson(int count, const char* path) {
+static void GenerateHaversineJson(int count, cstr path) {
     PROFILE_FUNCTION();
 
     FILE* f = fopen(path, "wb");
@@ -97,7 +49,7 @@ static void GenerateHaversineJson(int count, const char* path) {
         PROFILE_ADD_BANDWIDTH(3 + 6 + 6 + 6 + 6 + 4);
         fputs("\t{\n", f);
 
-        double v = frand_unit() * 160.0 - 80.0;
+        f64 v = frand_unit() * 160.0 - 80.0;
         snprintf(buf, sizeof(buf), "\t\t\"x0\": %.2f,\n", v);
         fputs(buf, f);
 
@@ -134,11 +86,11 @@ typedef enum {
 } HaversineParsingState;
 
 typedef struct {
-    const char* key;
-    double      value;
+    cstr key;
+    f64  value;
 } JsonKeyValue;
 
-static Array<HaversinePair> ParseHaversineJson(Array<u8>& bytes, int expected_count = 1024) {
+Array<HaversinePair> ParseHaversineJson(Array<u8>& bytes, int expected_count = 1024) {
     PROFILE_FUNCTION();
     PROFILE_ADD_BANDWIDTH(bytes.cap);
     auto result = Array<HaversinePair>::New(expected_count);
@@ -197,8 +149,8 @@ static Array<HaversinePair> ParseHaversineJson(Array<u8>& bytes, int expected_co
         case PS_Value: {
             if (b == ',' || b == '}') {
                 curKey.Push('\0');
-                const char* val = (cstr) & (*curVal.data);
-                curKv.value     = strtod(val, NULL);
+                cstr val    = (cstr) & (*curVal.data);
+                curKv.value = strtod(val, NULL);
 
                 if (strcmp(curKv.key, "x0") == 0)
                     curPair.x0 = curKv.value;
