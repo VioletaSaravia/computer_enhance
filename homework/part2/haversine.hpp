@@ -19,7 +19,6 @@ f64 Haversine(HaversinePair p, f64 radius) {
 
 f64 SumHaversines(Array<HaversinePair> pairs) {
     PROFILE_FUNCTION();
-    if (pairs.len == 0) return 0.0;
     const f64 coef = 1.0 / (f64)pairs.len;
     f64       sum  = 0.0;
     for (size_t i = 0; i < pairs.len; ++i) {

@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "types.hpp"
+#include <Psapi.h>
 
 #ifdef _WIN32
 
@@ -22,6 +23,35 @@ u64 ReadOSTimer() {
     if (!ok) printf("[ERROR] Couldn't obtain OS timer\n");
 
     return ok ? Value.QuadPart : 0;
+}
+
+struct OSMetrics : Singleton {
+    bool   Initialized;
+    HANDLE ProcessHandle;
+
+    static OSMetrics& Get() {
+        static OSMetrics metrics;
+        return metrics;
+    }
+};
+
+static u64 ReadOSPageFaultCount(void) {
+    PROCESS_MEMORY_COUNTERS_EX MemoryCounters = {};
+
+    MemoryCounters.cb = sizeof(MemoryCounters);
+    GetProcessMemoryInfo(
+        OSMetrics::Get().ProcessHandle, (PROCESS_MEMORY_COUNTERS*)&MemoryCounters, sizeof(MemoryCounters));
+
+    u64 result = MemoryCounters.PageFaultCount;
+    return result;
+}
+
+static void InitializeOSMetrics(void) {
+    if (!OSMetrics::Get().Initialized) {
+        OSMetrics::Get().Initialized = true;
+        OSMetrics::Get().ProcessHandle =
+            OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
+    }
 }
 
 #else
@@ -111,8 +141,8 @@ struct Profiler {
     bool ended;
     u64  start;
 
-    FixedArray<Block, MAX_BLOCKS> blocks;
-    FixedArray<u64, MAX_BLOCKS>   queue;
+    StackArray<Block, MAX_BLOCKS> blocks;
+    StackArray<u64, MAX_BLOCKS>   queue;
 
     static Profiler  _Profiler;
     static bool      Initialized; // Prevents destructor from being called on init <.<
@@ -229,7 +259,7 @@ Profiler Profiler::_Profiler   = {};
 bool     Profiler::Initialized = false;
 
 typedef struct {
-    u64 time, bytes;
+    u64 time, bytes, pageFaults;
 } RepBlock;
 
 extern "C" {
@@ -239,6 +269,10 @@ i32 ByTime(const void* from, const void* to) {
 
 i32 ByBytes(const void* from, const void* to) {
     return ((RepBlock*)(from))->bytes - ((RepBlock*)(to))->bytes;
+}
+
+i32 ByPageFaults(const void* from, const void* to) {
+    return ((RepBlock*)(from))->pageFaults - ((RepBlock*)(to))->pageFaults;
 }
 }
 
@@ -262,12 +296,16 @@ struct RepetitionProfiler {
         };
     }
 
-    void BeginRep() { this->current.time = ReadOSTimer(); }
+    void BeginRep() {
+        this->current.time       = ReadOSTimer();
+        this->current.pageFaults = ReadOSPageFaultCount();
+    }
 
     void AddBytes(u64 bytes) { this->current.bytes += bytes; }
 
     void EndRep() {
-        this->current.time = ReadOSTimer() - this->current.time;
+        this->current.time       = ReadOSTimer() - this->current.time;
+        this->current.pageFaults = ReadOSPageFaultCount() - this->current.pageFaults;
 
         if (this->current.time < this->min.time || this->min.time == 0) {
             this->min = this->current;
@@ -285,32 +323,49 @@ struct RepetitionProfiler {
     ~RepetitionProfiler() {
         printf("[INFO] Finished profiler %s after %llu repeats.\n", this->name, this->repeats);
 
+        // MIN
         f64 minTime = f64(this->min.time) / f64(GetOSTimerFreq());
-        printf("\t> Min: \t%.4f ms\t%.4f GB/s\n",
+        printf("\t> Min: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                minTime * 1000.0,
-               f64(this->min.bytes) / minTime / 1024.0 / 1024.0 / 1024.0);
-        f64 maxTime = f64(this->max.time) / f64(GetOSTimerFreq());
-        printf("\t> Max: \t%.4f ms\t%.4f GB/s\n",
-               maxTime * 1000.0,
-               f64(this->max.bytes) / maxTime / 1024.0 / 1024.0 / 1024.0);
+               f64(this->min.bytes) / minTime / 1024.0 / 1024.0 / 1024.0,
+               this->min.pageFaults);
 
+        // MAX
+        f64 maxTime = f64(this->max.time) / f64(GetOSTimerFreq());
+        printf("\t> Max: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
+               maxTime * 1000.0,
+               f64(this->max.bytes) / maxTime / 1024.0 / 1024.0 / 1024.0,
+               this->max.pageFaults);
+
+        // AVERAGE
         for (u64 i = 0; i < repeats; i++) {
             this->avg.time += all[i].time;
             this->avg.bytes += all[i].bytes;
+            this->avg.pageFaults += all[i].pageFaults;
         }
-        f64 avgTime  = f64(avg.time) / f64(repeats);
-        f64 avgBytes = f64(avg.bytes) / f64(repeats);
-
+        f64 avgBytes  = f64(avg.bytes) / f64(repeats);
+        f64 avgFaults = f64(avg.pageFaults) / f64(repeats);
+        f64 avgTime   = f64(avg.time) / f64(repeats);
         avgTime /= f64(GetOSTimerFreq());
-        printf("\t> Avg: \t%.4f ms\t%.4f GB/s\n", avgTime * 1000.0, f64(avgBytes) / avgTime / 1024.0 / 1024.0 / 1024.0);
 
+        printf("\t> Avg: \t%.3f ms\t%.3f GB/s\t%.2f pf\n",
+               avgTime * 1000.0,
+               f64(avgBytes) / avgTime / 1024.0 / 1024.0 / 1024.0,
+               avgFaults);
+
+        // MEAN
         qsort(all, repeats, sizeof(RepBlock), ByTime);
         f64 meanTime = all[repeats / 2].time / f64(GetOSTimerFreq());
 
         // qsort(all, repeats, sizeof(RepBlock), ByBytes);
         f64 meanBytes = all[repeats / 2].bytes;
-        printf(
-            "\t> Mean:\t%.4f ms\t%.4f GB/s\n", meanTime * 1000.0, f64(meanBytes) / meanTime / 1024.0 / 1024.0 / 1024.0);
+
+        qsort(all, repeats, sizeof(RepBlock), ByPageFaults);
+        u64 meanPageFaults = all[repeats / 2].pageFaults;
+        printf("\t> Mean:\t%.3f ms\t%.3f GB/s\t%llu pf\n",
+               meanTime * 1000.0,
+               f64(meanBytes) / meanTime / 1024.0 / 1024.0 / 1024.0,
+               meanPageFaults);
 
         printf("\n");
         free(all);

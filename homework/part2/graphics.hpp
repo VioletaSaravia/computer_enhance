@@ -5,7 +5,7 @@
 struct Color {
     u8 r, g, b, a;
 
-    static FixedArray<Color, 32> Palette;
+    static StackArray<Color, 32> Palette;
     constexpr void SetPalette(cstr path){
     }
 

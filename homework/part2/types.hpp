@@ -26,38 +26,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-template <typename T, typename E = cstr> struct Result {
-    bool ok;
-    union {
-        T value;
-        E error;
-    };
-
-    ~Result() {
-        if (ok) {
-            value.~T();
-        } else {
-            error.~E();
-        }
-    }
-
-    constexpr operator T() {
-        if (ok)
-            return value;
-        else
-            abort();
-    }
-    constexpr operator T&() {
-        if (ok)
-            return value;
-        else
-            abort();
-    }
-
-    static constexpr Result<T, E> Ok(T value) { return Result{.ok = true, .value = value}; }
-    static constexpr Result<T, E> Err(E error) { return Result{.ok = false, .error = error}; }
-};
-
 #define global   static
 #define persist  static
 #define internal static
@@ -446,16 +414,34 @@ constexpr auto TB(Integral auto val) {
     return GB(val) * 1024;
 }
 
-#define PERM_MEMORY_SIZE MB(64)
-#define TEMP_MEMORY_SIZE MB(8)
+#ifndef PERM_MEMORY_SIZE
+#define PERM_MEMORY_SIZE MB(1024)
+#endif
 
-struct Arena {
+#ifndef TEMP_MEMORY_SIZE
+#define TEMP_MEMORY_SIZE MB(32)
+#endif
+
+struct Singleton {
+    Singleton() {}
+    ~Singleton()                           = default;
+    Singleton(const Singleton&)            = delete;
+    Singleton(Singleton&&)                 = delete;
+    Singleton& operator=(const Singleton&) = delete;
+    Singleton& operator=(Singleton&&)      = delete;
+};
+
+struct Arena : Singleton {
     u8* data;
     u32 gen;
     u64 len, cap;
 
+    Arena(u64 size)
+        : data{(u8*)VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)}, gen{1}, len{0}, cap{size} {}
+    // : data{(u8*)malloc(size)}, gen{1}, len{0}, cap{size} {}
     static Arena& Perm(u64 initSize = PERM_MEMORY_SIZE) {
         static Arena arena(initSize);
+
         return arena;
     }
 
@@ -483,16 +469,11 @@ struct Arena {
         bool NotNull() const { return bool(this); }
     };
 
-    Arena(u64 size) : data{(u8*)malloc(size)}, gen{1}, len{0}, cap{size} {}
-
-    ~Arena()                       = default;
-    Arena(const Arena&)            = delete;
-    Arena(Arena&&)                 = delete;
-    Arena& operator=(const Arena&) = delete;
-    Arena& operator=(Arena&&)      = delete;
-
     template <typename T> Handle<T> Alloc(u64 count = 1) {
-        if (len + sizeof(T) * count > cap) return nullptr;
+        if (len + sizeof(T) * count > cap) {
+            printf("[WARNING] Permanent memory full\n");
+            return nullptr;
+        }
 
         T* result = (T*)&data[len];
         len += sizeof(T) * count;
@@ -503,6 +484,8 @@ struct Arena {
 };
 
 template <typename T> using Handle = Arena::Handle<T>;
+
+#define WARN(msg) printf("[WARNING] " __LINE__ " " msg "\n")
 
 template <typename T> struct Array {
     inline static T Empty = {};
@@ -596,16 +579,21 @@ template <typename T> struct Array {
     }
 };
 
-typedef Array<u8> String;
+// typedef Array<u8> String;
 
-template <typename T, unsigned int N> struct FixedArray {
+struct String : Array<u8> {
+    cstr Cstr() { return (cstr)(this->data.ToPtr()); }
+    String(cstr str) : Array<u8>{.data = (u8*)(str), .len = strlen(str), .cap = len} {}
+};
+
+template <typename T, unsigned int N> struct StackArray {
     T   data[N];
     u64 len;
     u64 cap = N;
 
     void Push(T& element) {
         if (len >= N) {
-            printf("[WARNING] FixedArray length exceeded\n");
+            printf("[WARNING] StackArray length exceeded\n");
             return;
         }
 
@@ -615,7 +603,7 @@ template <typename T, unsigned int N> struct FixedArray {
 
     T& Pop() {
         if (len == 0) {
-            printf("[WARNING] FixedArray is empty\n");
+            printf("[WARNING] StackArray is empty\n");
             return data[0];
         }
 
@@ -625,7 +613,7 @@ template <typename T, unsigned int N> struct FixedArray {
 
     T& Last() {
         if (len == 0) {
-            printf("[WARNING] FixedArray is empty\n");
+            printf("[WARNING] StackArray is empty\n");
             return data[0];
         }
 
@@ -634,7 +622,7 @@ template <typename T, unsigned int N> struct FixedArray {
 
     T& operator[](u64 id) {
         if (id >= cap) {
-            printf("[WARNING] FixedArray is empty\n");
+            printf("[WARNING] StackArray is empty\n");
             return data[0];
         }
 
