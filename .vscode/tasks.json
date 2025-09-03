@@ -11,6 +11,7 @@
                 "/nologo",
                 "/Fe${fileDirname}\\build\\${fileBasenameNoExtension}.exe",
                 "/Fo${fileDirname}\\build\\",
+                "/Fd${fileDirname}\\build\\",
                 "${file}"
             ],
             "options": {
