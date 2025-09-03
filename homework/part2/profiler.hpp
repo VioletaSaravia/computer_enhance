@@ -39,8 +39,9 @@ static u64 ReadOSPageFaultCount(void) {
     PROCESS_MEMORY_COUNTERS_EX MemoryCounters = {};
 
     MemoryCounters.cb = sizeof(MemoryCounters);
-    GetProcessMemoryInfo(
-        OSMetrics::Get().ProcessHandle, (PROCESS_MEMORY_COUNTERS*)&MemoryCounters, sizeof(MemoryCounters));
+    GetProcessMemoryInfo(OSMetrics::Get().ProcessHandle,
+                         (PROCESS_MEMORY_COUNTERS*)&MemoryCounters,
+                         sizeof(MemoryCounters));
 
     u64 result = MemoryCounters.PageFaultCount;
     return result;
@@ -71,8 +72,8 @@ u64 ReadOSTimer() {
 #endif
 
 inline u64 ReadCPUTimer(void) {
-#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64) || defined(__i386__) ||          \
-    defined(_M_IX86)
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64) ||           \
+    defined(__i386__) || defined(_M_IX86)
     return __rdtsc();
 
 #elif defined(__aarch64__)
@@ -187,7 +188,8 @@ struct Profiler {
 
     void AddBytes(u64 bytes) { blocks[queue.Last()].bytesProcessed += bytes; }
 
-    BlockFlag BeginScopeBlock(i32 id, cstr label, cstr file = "", i32 line = 0, u64 bytesProcessed = 0) {
+    BlockFlag
+    BeginScopeBlock(i32 id, cstr label, cstr file = "", i32 line = 0, u64 bytesProcessed = 0) {
         BeginBlock(id, label, file, line, bytesProcessed);
         return BlockFlag{.parent = this};
     }
@@ -215,8 +217,13 @@ struct Profiler {
 
         f64 totalTime = f64(ReadOSTimer() - start) / f64(GetOSTimerFreq());
         printf("[INFO] Finished profiler %s in %.6f seconds\n", name, totalTime);
-        printf(" %-24s \t| %-25s \t| %-25s \t| %-12s\n", "Name[n]", "Time (Ex)", "Time (Inc)", "Bandwidth");
-        printf("-------------------------------------------------------------------------------------------------------"
+        printf(" %-24s \t| %-25s \t| %-25s \t| %-12s\n",
+               "Name[n]",
+               "Time (Ex)",
+               "Time (Inc)",
+               "Bandwidth");
+        printf("-----------------------------------------------------------------------------------"
+               "--------------------"
                "--------\n");
 
         for (u64 i = 1; i < blocks.cap; i++) {
@@ -234,14 +241,15 @@ struct Profiler {
                        nextTimeInc,
                        (nextTimeInc / totalTime) * 100);
             } else {
-                printf(" %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
-                       next.label,
-                       next.iterations,
-                       nextTimeEx,
-                       (nextTimeEx / totalTime) * 100,
-                       nextTimeInc,
-                       (nextTimeInc / totalTime) * 100,
-                       f64(next.bytesProcessed) / nextTimeEx / 1024.0 / 1024.0 / 1024.0);
+                printf(
+                    " %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
+                    next.label,
+                    next.iterations,
+                    nextTimeEx,
+                    (nextTimeEx / totalTime) * 100,
+                    nextTimeInc,
+                    (nextTimeInc / totalTime) * 100,
+                    f64(next.bytesProcessed) / nextTimeEx / 1024.0 / 1024.0 / 1024.0);
             }
         }
     }
@@ -374,32 +382,34 @@ struct RepetitionProfiler {
 
 #ifdef ENABLE_PROFILER
 
-#define PROFILER_NEW(name)           Profiler::New(name)
-#define PROFILER_END()               Profiler::Get().End()
-#define PROFILE_BLOCK_BEGIN(name)    Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
+#define PROFILER_NEW(name) Profiler::New(name)
+#define PROFILER_END()     Profiler::Get().End()
+#define PROFILE_BLOCK_BEGIN(name)                                                                  \
+    Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
 #define PROFILE_ADD_BANDWIDTH(bytes) Profiler::Get().AddBytes(bytes)
 #define PROFILE_BLOCK_END()          Profiler::Get().EndBlock()
-#define PROFILE_SCOPE(name)                                                                                            \
+#define PROFILE_SCOPE(name)                                                                        \
     auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, name, __FILE__, __LINE__)
-#define PROFILE_FUNCTION()                                                                                             \
-    auto _profilerFlag = Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, __func__, __FILE__, __LINE__)
-#define PROFILE(name, code)                                                                                            \
-    Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__);                                             \
-    code;                                                                                                              \
+#define PROFILE_FUNCTION()                                                                         \
+    auto _profilerFlag =                                                                           \
+        Profiler::Get().BeginScopeBlock(__COUNTER__ + 1, __func__, __FILE__, __LINE__)
+#define PROFILE(name, code)                                                                        \
+    Profiler::Get().BeginBlock(__COUNTER__ + 1, name, __FILE__, __LINE__);                         \
+    code;                                                                                          \
     Profiler::Get().EndBlock();
 
-#define REPETITION_PROFILE(name, count)                                                                                \
-    do {                                                                                                               \
-        auto _profiler = RepetitionProfiler::New(name, count);                                                         \
-        while (_profiler.repeats < _profiler.maxRepeats) {                                                             \
+#define REPETITION_PROFILE(name, count)                                                            \
+    do {                                                                                           \
+        auto _profiler = RepetitionProfiler::New(name, count);                                     \
+        while (_profiler.repeats < _profiler.maxRepeats) {                                         \
             _profiler.BeginRep();
 
 #define REPETITION_BANDWIDTH(bytes) _profiler.AddBytes(bytes)
 
-#define REPETITION_END()                                                                                               \
-    _profiler.EndRep();                                                                                                \
-    }                                                                                                                  \
-    }                                                                                                                  \
+#define REPETITION_END()                                                                           \
+    _profiler.EndRep();                                                                            \
+    }                                                                                              \
+    }                                                                                              \
     while (0);
 
 #else
