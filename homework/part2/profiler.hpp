@@ -2,121 +2,9 @@
 
 #include <stdio.h>
 
+#include "containers.hpp"
+#include "os.hpp"
 #include "types.hpp"
-#include <Psapi.h>
-
-#ifdef _WIN32
-
-u64 GetOSTimerFreq() {
-    LARGE_INTEGER Freq = {};
-
-    bool ok = QueryPerformanceFrequency(&Freq);
-    if (!ok) printf("[ERROR] Couldn't obtain OS timer frequency\n");
-
-    return ok ? Freq.QuadPart : 0;
-}
-
-u64 ReadOSTimer() {
-    LARGE_INTEGER Value = {};
-
-    bool ok = QueryPerformanceCounter(&Value);
-    if (!ok) printf("[ERROR] Couldn't obtain OS timer\n");
-
-    return ok ? Value.QuadPart : 0;
-}
-
-struct OSMetrics : Singleton {
-    bool   Initialized;
-    HANDLE ProcessHandle;
-
-    static OSMetrics& Get() {
-        static OSMetrics metrics;
-        return metrics;
-    }
-};
-
-static u64 ReadOSPageFaultCount(void) {
-    PROCESS_MEMORY_COUNTERS_EX MemoryCounters = {};
-
-    MemoryCounters.cb = sizeof(MemoryCounters);
-    GetProcessMemoryInfo(OSMetrics::Get().ProcessHandle,
-                         (PROCESS_MEMORY_COUNTERS*)&MemoryCounters,
-                         sizeof(MemoryCounters));
-
-    u64 result = MemoryCounters.PageFaultCount;
-    return result;
-}
-
-static void InitializeOSMetrics(void) {
-    if (!OSMetrics::Get().Initialized) {
-        OSMetrics::Get().Initialized = true;
-        OSMetrics::Get().ProcessHandle =
-            OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
-    }
-}
-
-#else
-
-#include <time.h>
-
-u64 GetOSTimerFreq() {
-    return 1000000000ULL;
-}
-
-u64 ReadOSTimer() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (u64)ts.tv_sec * GetOSTimerFreq() + ts.tv_nsec;
-}
-
-#endif
-
-inline u64 ReadCPUTimer(void) {
-#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64) ||           \
-    defined(__i386__) || defined(_M_IX86)
-    return __rdtsc();
-
-#elif defined(__aarch64__)
-    // ARMv8 (AArch64): use CNTVCT_EL0
-    uint64_t cnt;
-    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(cnt));
-    return cnt;
-
-#elif defined(__arm__)
-    // ARMv7-A: use PMCCNTR (if enabled)
-    uint32_t cc;
-    __asm__ volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(cc));
-    return (uint64_t)cc;
-
-#else
-#error "Unsupported architecture"
-#endif
-}
-
-u64 EstimateCPUTimerFreq(void) {
-    u64 MillisecondsToWait = 100;
-    u64 OSFreq             = GetOSTimerFreq();
-
-    u64 CPUStart   = ReadCPUTimer();
-    u64 OSStart    = ReadOSTimer();
-    u64 OSEnd      = 0;
-    u64 OSElapsed  = 0;
-    u64 OSWaitTime = OSFreq * MillisecondsToWait / 1000;
-    while (OSElapsed < OSWaitTime) {
-        OSEnd     = ReadOSTimer();
-        OSElapsed = OSEnd - OSStart;
-    }
-
-    u64 CPUEnd     = ReadCPUTimer();
-    u64 CPUElapsed = CPUEnd - CPUStart;
-
-    u64 CPUFreq = 0;
-    if (OSElapsed) {
-        CPUFreq = OSFreq * CPUElapsed / OSElapsed;
-    }
-
-    return CPUFreq;
-};
 
 struct Block {
     cstr label, file;
@@ -153,7 +41,7 @@ struct Profiler {
         Profiler::_Profiler = Profiler{
             .name   = name,
             .ended  = false,
-            .start  = ReadOSTimer(),
+            .start  = OS::ReadTimer(),
             .blocks = {},
             .queue  = {},
         };
@@ -165,7 +53,7 @@ struct Profiler {
         }
 
         Block* m    = &blocks[id];
-        u64    time = ReadOSTimer();
+        u64    time = OS::ReadTimer();
 
         if (queue.len > 0) {
             Block* prev = &blocks[queue.Last()];
@@ -195,7 +83,7 @@ struct Profiler {
     }
 
     void EndBlock() {
-        u64 now = ReadOSTimer();
+        u64 now = OS::ReadTimer();
 
         Block* m = &blocks[queue.Pop()];
         m->timeEx += now - m->from;
@@ -215,8 +103,9 @@ struct Profiler {
         ended       = true;
         Initialized = false;
 
-        f64 totalTime = f64(ReadOSTimer() - start) / f64(GetOSTimerFreq());
-        printf("[INFO] Finished profiler %s in %.6f seconds\n", name, totalTime);
+        f64 totalTime = f64(OS::ReadTimer() - start) / f64(OS::GetTimerFreq());
+        
+        INFO("Finished profiler %s in %.6f seconds", name, totalTime);
         printf(" %-24s \t| %-25s \t| %-25s \t| %-12s\n",
                "Name[n]",
                "Time (Ex)",
@@ -230,8 +119,8 @@ struct Profiler {
             auto next = blocks[i];
             if (next.iterations == 0) continue;
 
-            f64 nextTimeEx  = (f64(next.timeEx) / f64(GetOSTimerFreq()));
-            f64 nextTimeInc = (f64(next.timeInc) / f64(GetOSTimerFreq()));
+            f64 nextTimeEx  = (f64(next.timeEx) / f64(OS::GetTimerFreq()));
+            f64 nextTimeInc = (f64(next.timeInc) / f64(OS::GetTimerFreq()));
             if (next.bytesProcessed == 0) {
                 printf(" %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
                        next.label,
@@ -305,15 +194,15 @@ struct RepetitionProfiler {
     }
 
     void BeginRep() {
-        this->current.time       = ReadOSTimer();
-        this->current.pageFaults = ReadOSPageFaultCount();
+        this->current.time       = OS::ReadTimer();
+        this->current.pageFaults = OS::ReadPageFaultCount();
     }
 
     void AddBytes(u64 bytes) { this->current.bytes += bytes; }
 
     void EndRep() {
-        this->current.time       = ReadOSTimer() - this->current.time;
-        this->current.pageFaults = ReadOSPageFaultCount() - this->current.pageFaults;
+        this->current.time       = OS::ReadTimer() - this->current.time;
+        this->current.pageFaults = OS::ReadPageFaultCount() - this->current.pageFaults;
 
         if (this->current.time < this->min.time || this->min.time == 0) {
             this->min = this->current;
@@ -329,17 +218,17 @@ struct RepetitionProfiler {
     }
 
     ~RepetitionProfiler() {
-        printf("[INFO] Finished profiler %s after %llu repeats.\n", this->name, this->repeats);
+        INFO("Finished profiler %s after %llu repeats.", this->name, this->repeats);
 
         // MIN
-        f64 minTime = f64(this->min.time) / f64(GetOSTimerFreq());
+        f64 minTime = f64(this->min.time) / f64(OS::GetTimerFreq());
         printf("\t> Min: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                minTime * 1000.0,
                f64(this->min.bytes) / minTime / 1024.0 / 1024.0 / 1024.0,
                this->min.pageFaults);
 
         // MAX
-        f64 maxTime = f64(this->max.time) / f64(GetOSTimerFreq());
+        f64 maxTime = f64(this->max.time) / f64(OS::GetTimerFreq());
         printf("\t> Max: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                maxTime * 1000.0,
                f64(this->max.bytes) / maxTime / 1024.0 / 1024.0 / 1024.0,
@@ -354,7 +243,7 @@ struct RepetitionProfiler {
         f64 avgBytes  = f64(avg.bytes) / f64(repeats);
         f64 avgFaults = f64(avg.pageFaults) / f64(repeats);
         f64 avgTime   = f64(avg.time) / f64(repeats);
-        avgTime /= f64(GetOSTimerFreq());
+        avgTime /= f64(OS::GetTimerFreq());
 
         printf("\t> Avg: \t%.3f ms\t%.3f GB/s\t%.2f pf\n",
                avgTime * 1000.0,
@@ -363,7 +252,7 @@ struct RepetitionProfiler {
 
         // MEAN
         qsort(all, repeats, sizeof(RepBlock), ByTime);
-        f64 meanTime = all[repeats / 2].time / f64(GetOSTimerFreq());
+        f64 meanTime = all[repeats / 2].time / f64(OS::GetTimerFreq());
 
         // qsort(all, repeats, sizeof(RepBlock), ByBytes);
         f64 meanBytes = all[repeats / 2].bytes;

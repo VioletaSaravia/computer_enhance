@@ -26,6 +26,27 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#define COL_RESET "\033[0m"
+#define COL_INFO  "\033[32m"         // Green
+#define COL_WARN  "\033[33m"         // Yellow
+#define COL_ERROR "\033[31m"         // Red
+#define COL_FATAL "\033[41m\033[97m" // White on Red background
+
+#define INFO(msg, ...)                                                                             \
+    printf(COL_INFO "[INFO]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
+#define WARN(msg, ...)                                                                             \
+    printf(COL_WARN "[WARN]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
+#define ERR(msg, ...)                                                                              \
+    printf(COL_ERROR "[ERROR]" COL_RESET "[%s] " msg "\n", __func__, ##__VA_ARGS__)
+#define FATAL(msg, ...)                                                                            \
+    do {                                                                                           \
+        printf(COL_FATAL "[FATAL]" COL_RESET " [%s:%d] " msg "\n",                                 \
+               __FILE__,                                                                           \
+               __LINE__,                                                                           \
+               ##__VA_ARGS__);                                                                     \
+        abort();                                                                                   \
+    } while (0);
+
 #define global   static
 #define persist  static
 #define internal static
@@ -49,6 +70,13 @@ concept Float = std::floating_point<T>;
 template <Float T> constexpr bool IsZero(T value, T epsilon = 0.001f) {
     return fabs(value) < epsilon;
 }
+
+struct Rand {
+    static void Init(u32 _seed = 123456789u) {
+        static u32 seed = _seed;
+        srand(_seed);
+    }
+};
 
 typedef const char* cstr;
 
@@ -203,10 +231,18 @@ struct v4 {
     constexpr v4 operator+() const { return *this; }
     constexpr v4 operator-() const { return {-x, -y, -z, -w}; }
 
-    constexpr v4 operator+(const v4& rhs) const { return {x + rhs.x, y + rhs.y, z + rhs.z, w + rhs.w}; }
-    constexpr v4 operator-(const v4& rhs) const { return {x - rhs.x, y - rhs.y, z - rhs.z, w - rhs.w}; }
-    constexpr v4 operator*(const v4& rhs) const { return {x * rhs.x, y * rhs.y, z * rhs.z, w * rhs.w}; }
-    constexpr v4 operator/(const v4& rhs) const { return {x / rhs.x, y / rhs.y, z / rhs.z, w / rhs.w}; }
+    constexpr v4 operator+(const v4& rhs) const {
+        return {x + rhs.x, y + rhs.y, z + rhs.z, w + rhs.w};
+    }
+    constexpr v4 operator-(const v4& rhs) const {
+        return {x - rhs.x, y - rhs.y, z - rhs.z, w - rhs.w};
+    }
+    constexpr v4 operator*(const v4& rhs) const {
+        return {x * rhs.x, y * rhs.y, z * rhs.z, w * rhs.w};
+    }
+    constexpr v4 operator/(const v4& rhs) const {
+        return {x / rhs.x, y / rhs.y, z / rhs.z, w / rhs.w};
+    }
 
     constexpr v4 operator+(Float auto s) const { return {x + s, y + s, z + s, w + s}; }
     constexpr v4 operator-(Float auto s) const { return {x - s, y - s, z - s, w - s}; }
@@ -414,218 +450,11 @@ constexpr auto TB(Integral auto val) {
     return GB(val) * 1024;
 }
 
-#ifndef PERM_MEMORY_SIZE
-#define PERM_MEMORY_SIZE MB(1024)
-#endif
-
-#ifndef TEMP_MEMORY_SIZE
-#define TEMP_MEMORY_SIZE MB(32)
-#endif
-
-struct Singleton {
-    Singleton() {}
-    ~Singleton()                           = default;
-    Singleton(const Singleton&)            = delete;
-    Singleton(Singleton&&)                 = delete;
-    Singleton& operator=(const Singleton&) = delete;
-    Singleton& operator=(Singleton&&)      = delete;
-};
-
-struct Arena : Singleton {
-    u8* data;
-    u32 gen;
-    u64 len, cap;
-
-    Arena(u64 size)
-        : data{(u8*)VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)}, gen{1}, len{0}, cap{size} {}
-    // : data{(u8*)malloc(size)}, gen{1}, len{0}, cap{size} {}
-    static Arena& Perm(u64 initSize = PERM_MEMORY_SIZE) {
-        static Arena arena(initSize);
-
-        return arena;
-    }
-
-    static Arena& Temp(u64 initSize = TEMP_MEMORY_SIZE) {
-        static Arena arena(initSize);
-        return arena;
-    }
-
-    template <typename T> struct Handle {
-        u32 gen, id;
-
-        Handle() : gen{0}, id{0} {}
-        Handle(T* ptr) : gen{Arena::Perm().gen}, id{u32((u8*)ptr - (u8*)Arena::Perm().data)} {}
-
-        T* ToPtr() { return (T*)(&Arena::Perm().data[this->id]); }
-        T& operator*() { return *ToPtr(); }
-        T* operator->() { return ToPtr(); }
-        T& operator[](size_t index) { return *(ToPtr() + index); }
-
-        operator T*() { return ToPtr(); }
-        operator const T*() const { return (const T*)(&Arena::Perm().data[this->id]); }
-
-        operator bool() const { return gen != 0; }
-        bool operator!() const { return gen == 0; }
-        bool NotNull() const { return bool(this); }
-    };
-
-    template <typename T> Handle<T> Alloc(u64 count = 1) {
-        if (len + sizeof(T) * count > cap) {
-            printf("[WARNING] Permanent memory full\n");
-            return nullptr;
-        }
-
-        T* result = (T*)&data[len];
-        len += sizeof(T) * count;
-        return Handle(result);
-    }
-
-    void Clear() { len = 0; }
-};
-
-template <typename T> using Handle = Arena::Handle<T>;
-
-#define WARN(msg) printf("[WARNING] " __LINE__ " " msg "\n")
-
-template <typename T> struct Array {
-    inline static T Empty = {};
-
-    Handle<T> data;
-    u64       len, cap;
-
-    Handle<Array<T>> next;
-
-    static Array<T> New(u64 size) {
-        assert(size > 0);
-
-        return Array<T>{
-            .data = Arena::Perm().Alloc<T>(size),
-            .len  = 0,
-            .cap  = size,
-            .next = nullptr,
-        };
-    }
-
-    void Push(T& element) {
-        if (len >= cap) {
-            if (next.NotNull()) {
-                next->Push(element);
-                return;
-            }
-
-            Resize();
-            Push(element);
-            return;
-        }
-
-        data[len] = element;
-        len++;
-    }
-
-    void Push(T const& element) {
-        if (len >= cap) {
-            if (next.NotNull()) {
-                next->Push(element);
-                return;
-            }
-
-            Resize();
-            Push(element);
-            return;
-        }
-
-        data[len] = element;
-        len++;
-    }
-
-    void Resize() {
-        printf("[INFO] Resizing array.\n");
-        next  = Arena::Perm().Alloc<Array<T>>();
-        *next = Array<T>::New(cap);
-    }
-
-    T& Pop() {
-        if (next && next->len > 0) {
-            return next->Pop();
-        }
-
-        if (len == 0) {
-            printf("[WARNING] Array length exceeded\n");
-            return Array<T>::Empty;
-        }
-
-        len -= 1;
-        return data[len];
-    }
-
-    T& Last() {
-        if (next && next->len > 0) {
-            return next->Last();
-        }
-
-        if (len == 0) {
-            printf("[WARNING] Array is null\n");
-            return Array<T>::Empty;
-        }
-
-        return data[len - 1];
-    }
-
-    T& operator[](u64 id) {
-        if (id >= cap) {
-            return next ? (*next)[id - cap] : Array<T>::Empty;
-        }
-        return data[id];
-    }
-};
-
-// typedef Array<u8> String;
-
-struct String : Array<u8> {
-    cstr Cstr() { return (cstr)(this->data.ToPtr()); }
-    String(cstr str) : Array<u8>{.data = (u8*)(str), .len = strlen(str), .cap = len} {}
-};
-
-template <typename T, unsigned int N> struct StackArray {
-    T   data[N];
-    u64 len;
-    u64 cap = N;
-
-    void Push(T& element) {
-        if (len >= N) {
-            printf("[WARNING] StackArray length exceeded\n");
-            return;
-        }
-
-        data[len] = element;
-        len++;
-    }
-
-    T& Pop() {
-        if (len == 0) {
-            printf("[WARNING] StackArray is empty\n");
-            return data[0];
-        }
-
-        len -= 1;
-        return data[len];
-    }
-
-    T& Last() {
-        if (len == 0) {
-            printf("[WARNING] StackArray is empty\n");
-            return data[0];
-        }
-
-        return data[len - 1];
-    }
-
-    T& operator[](u64 id) {
-        if (id >= cap) {
-            printf("[WARNING] StackArray is empty\n");
-            return data[0];
-        }
-
-        return data[id];
-    }
+struct ISingleton {
+    ISingleton()                             = default;
+    ~ISingleton()                            = default;
+    ISingleton(const ISingleton&)            = delete;
+    ISingleton(ISingleton&&)                 = delete;
+    ISingleton& operator=(const ISingleton&) = delete;
+    ISingleton& operator=(ISingleton&&)      = delete;
 };

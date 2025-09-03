@@ -1,13 +1,13 @@
 #pragma once
 
+#include "containers.hpp"
 #include "types.hpp"
 
 struct Color {
     u8 r, g, b, a;
 
     static StackArray<Color, 32> Palette;
-    constexpr void SetPalette(cstr path){
-    }
+    constexpr void               SetPalette(cstr path) {}
 
     constexpr operator v4() const {
         return v4{static_cast<f32>(r) / 255.0f,
@@ -26,18 +26,18 @@ static constexpr Color Black   = rgba(0, 0, 0, 1);
 static constexpr Color White   = rgba(255, 255, 255, 1);
 static constexpr Color Violeta = rgba(154, 60, 146, 1);
 
-enum Shape2DPivot {
-    SP_TOP_LEFT,
-    SP_TOP_RIGHT,
-    SP_TOP_CENTER,
-    SP_BOT_LEFT,
-    SP_BOT_RIGHT,
-    SP_BOT_CENTER,
-    SP_CENTER_LEFT,
-    SP_CENTER_RIGHT,
-    SP_CENTER,
+enum class Shape2DPivot {
+    TOP_LEFT,
+    TOP_RIGHT,
+    TOP_CENTER,
+    BOT_LEFT,
+    BOT_RIGHT,
+    BOT_CENTER,
+    CENTER_LEFT,
+    CENTER_RIGHT,
+    CENTER,
 
-    SP_COUNT,
+    COUNT,
 };
 
 struct Point2D : v2 {
@@ -66,10 +66,13 @@ union Rect {
         f32 x, y, w, h;
     };
 
-    bool Intersects(Rect b) { return !(x + w < b.x || x > b.x + b.w || y + h < b.y || y > b.y + b.h); }
+    bool Intersects(Rect b) {
+        return !(x + w < b.x || x > b.x + b.w || y + h < b.y || y > b.y + b.h);
+    }
     bool Intersects(Circle b);
 
-    void DrawRect(Color color = {}, Shape2DPivot pivot = {}, f32 rounding = {}, f32 rot = {}, f32 line = {}) {
+    void DrawRect(
+        Color color = {}, Shape2DPivot pivot = {}, f32 rounding = {}, f32 rot = {}, f32 line = {}) {
         printf("TODO\n");
         return;
     }
@@ -120,13 +123,13 @@ struct Poly {
     f32 count;
 };
 
-enum Shape2DType {
-    SHAPE2D_NONE,
-    SHAPE2D_POINT,
-    SHAPE2D_LINE,
-    SHAPE2D_RECT,
-    SHAPE2D_CIRCLE,
-    SHAPE2D_POLY,
+enum class Shape2DType {
+    NONE,
+    POINT,
+    LINE,
+    RECT,
+    CIRCLE,
+    POLY,
 };
 
 struct Shape2D {
@@ -141,13 +144,14 @@ struct Shape2D {
     };
 
     void Draw(Color color) {
+        using enum Shape2DType;
         switch (type) {
-        case SHAPE2D_NONE: return;
-        case SHAPE2D_POINT: point.Draw(10, color = color); break;
-        case SHAPE2D_LINE: line.DrawLine(color = color); break;
-        case SHAPE2D_RECT: rect.DrawRect(color = color); break;
-        case SHAPE2D_CIRCLE: circle.Draw(color = color); break;
-        case SHAPE2D_POLY: {
+        case NONE: return;
+        case POINT: point.Draw(10, color = color); break;
+        case LINE: line.DrawLine(color = color); break;
+        case RECT: rect.DrawRect(color = color); break;
+        case CIRCLE: circle.Draw(color = color); break;
+        case POLY: {
             for (size_t i = 0; i < poly.count - 1; i++) {
                 Rect{poly.points[i], poly.points[i + 1]}.DrawLine(color = color);
             }
@@ -158,32 +162,33 @@ struct Shape2D {
 };
 
 bool Intersects2D(Shape2D a, Shape2D b) {
+    using enum Shape2DType;
     switch (a.type) {
-    case SHAPE2D_NONE: return false;
-    case SHAPE2D_POINT: return false;
-    case SHAPE2D_LINE: return false;
+    case NONE: return false;
+    case POINT: return false;
+    case LINE: return false;
 
-    case SHAPE2D_RECT:
+    case RECT:
         switch (b.type) {
-        case SHAPE2D_NONE: return false;
-        case SHAPE2D_POINT: return false;
-        case SHAPE2D_LINE: return false;
-        case SHAPE2D_RECT: return a.rect.Intersects(b.rect);
-        case SHAPE2D_CIRCLE: return a.rect.Intersects(b.circle);
-        case SHAPE2D_POLY: return false;
+        case NONE: return false;
+        case POINT: return false;
+        case LINE: return false;
+        case RECT: return a.rect.Intersects(b.rect);
+        case CIRCLE: return a.rect.Intersects(b.circle);
+        case POLY: return false;
         }
 
-    case SHAPE2D_CIRCLE:
+    case CIRCLE:
         switch (b.type) {
-        case SHAPE2D_NONE: return false;
-        case SHAPE2D_POINT: return false;
-        case SHAPE2D_LINE: return false;
-        case SHAPE2D_RECT: return a.circle.Intersects(b.rect);
-        case SHAPE2D_CIRCLE: return a.circle.Intersects(b.circle);
-        case SHAPE2D_POLY: return false;
+        case NONE: return false;
+        case POINT: return false;
+        case LINE: return false;
+        case RECT: return a.circle.Intersects(b.rect);
+        case CIRCLE: return a.circle.Intersects(b.circle);
+        case POLY: return false;
         }
 
-    case SHAPE2D_POLY: return false;
+    case POLY: return false;
     }
 
     return false;
@@ -213,15 +218,7 @@ struct Mesh {
     f32         count;
 };
 
-enum Shape3DType {
-    SHAPE3D_NONE,
-    SHAPE3D_POINT,
-    SHAPE3D_CUBE,
-    SHAPE3D_SPHERE,
-    SHAPE3D_PLANE,
-    SHAPE3D_CAPSULE,
-    SHAPE3D_MESH
-};
+enum class Shape3DType { NONE, POINT, CUBE, SPHERE, PLANE, CAPSULE, MESH };
 
 struct Shape3D {
     Shape3DType type;
@@ -237,8 +234,9 @@ struct Shape3D {
 };
 
 inline bool IntersectsCubeCube(Box a, Box b) {
-    return !(a.pos.x + a.size.x < b.pos.x || a.pos.x > b.pos.x + b.size.x || a.pos.y + a.size.y < b.pos.y ||
-             a.pos.y > b.pos.y + b.size.y || a.pos.z + a.size.z < b.pos.z || a.pos.z > b.pos.z + b.size.z);
+    return !(a.pos.x + a.size.x < b.pos.x || a.pos.x > b.pos.x + b.size.x ||
+             a.pos.y + a.size.y < b.pos.y || a.pos.y > b.pos.y + b.size.y ||
+             a.pos.z + a.size.z < b.pos.z || a.pos.z > b.pos.z + b.size.z);
 }
 
 inline bool IntersectsCubeSphere(Box a, Sphere b) {
@@ -281,7 +279,8 @@ inline bool IntersectsPlaneCube(Plane a, Box b) {
 }
 
 inline bool IntersectsPlaneSphere(Plane a, Sphere b) {
-    f32 d = (b.pos.x - a.pos.x) * a.normal.x + (b.pos.y - a.pos.y) * a.normal.y + (b.pos.z - a.pos.z) * a.normal.z;
+    f32 d = (b.pos.x - a.pos.x) * a.normal.x + (b.pos.y - a.pos.y) * a.normal.y +
+            (b.pos.z - a.pos.z) * a.normal.z;
     return fabs(d) <= b.radius;
 }
 
@@ -326,9 +325,10 @@ inline bool IntersectsSphereCapsule(Sphere a, Capsule b) {
 inline bool IntersectsPlaneCapsule(Plane a, Capsule b) {
     v3  top    = {b.pos.x, b.pos.y + b.halfHeight, b.pos.z};
     v3  bottom = {b.pos.x, b.pos.y - b.halfHeight, b.pos.z};
-    f32 dTop   = (top.x - a.pos.x) * a.normal.x + (top.y - a.pos.y) * a.normal.y + (top.z - a.pos.z) * a.normal.z;
-    f32 dBottom =
-        (bottom.x - a.pos.x) * a.normal.x + (bottom.y - a.pos.y) * a.normal.y + (bottom.z - a.pos.z) * a.normal.z;
+    f32 dTop   = (top.x - a.pos.x) * a.normal.x + (top.y - a.pos.y) * a.normal.y +
+               (top.z - a.pos.z) * a.normal.z;
+    f32 dBottom = (bottom.x - a.pos.x) * a.normal.x + (bottom.y - a.pos.y) * a.normal.y +
+                  (bottom.z - a.pos.z) * a.normal.z;
     return !(dTop > b.radius && dBottom > b.radius) && !(dTop < -b.radius && dBottom < -b.radius);
 }
 inline bool IntersectsCapsuleCapsule(Capsule a, Capsule b) {
@@ -352,95 +352,101 @@ inline bool IntersectsCapsulePlane(Capsule b, Plane a) {
 }
 
 bool Intersects3D(Shape3D a, Shape3D b) {
+    using enum Shape3DType;
     switch (a.type) {
-    case SHAPE3D_NONE: return false;
-    case SHAPE3D_POINT: return false;
+    case NONE: return false;
+    case POINT: return false;
 
-    case SHAPE3D_CUBE:
+    case CUBE:
         switch (b.type) {
-        case SHAPE3D_NONE: return false;
-        case SHAPE3D_POINT: return false;
-        case SHAPE3D_CUBE: return IntersectsCubeCube(a.cube, b.cube);
-        case SHAPE3D_SPHERE: return IntersectsCubeSphere(a.cube, b.sphere);
-        case SHAPE3D_PLANE: return IntersectsCubePlane(a.cube, b.plane);
-        case SHAPE3D_CAPSULE: return IntersectsCubeCapsule(a.cube, b.capsule);
-        case SHAPE3D_MESH: return false;
+        case NONE: return false;
+        case POINT: return false;
+        case CUBE: return IntersectsCubeCube(a.cube, b.cube);
+        case SPHERE: return IntersectsCubeSphere(a.cube, b.sphere);
+        case PLANE: return IntersectsCubePlane(a.cube, b.plane);
+        case CAPSULE: return IntersectsCubeCapsule(a.cube, b.capsule);
+        case MESH: return false;
         }
 
-    case SHAPE3D_SPHERE:
+    case SPHERE:
         switch (b.type) {
-        case SHAPE3D_NONE: return false;
-        case SHAPE3D_POINT: return false;
-        case SHAPE3D_CUBE: return IntersectsSphereCube(a.sphere, b.cube);
-        case SHAPE3D_SPHERE: return IntersectsSphereSphere(a.sphere, b.sphere);
-        case SHAPE3D_PLANE: return IntersectsSpherePlane(a.sphere, b.plane);
-        case SHAPE3D_CAPSULE: return IntersectsSphereCapsule(a.sphere, b.capsule);
-        case SHAPE3D_MESH: return false;
+        case NONE: return false;
+        case POINT: return false;
+        case CUBE: return IntersectsSphereCube(a.sphere, b.cube);
+        case SPHERE: return IntersectsSphereSphere(a.sphere, b.sphere);
+        case PLANE: return IntersectsSpherePlane(a.sphere, b.plane);
+        case CAPSULE: return IntersectsSphereCapsule(a.sphere, b.capsule);
+        case MESH: return false;
         }
 
-    case SHAPE3D_PLANE:
+    case PLANE:
         switch (b.type) {
-        case SHAPE3D_NONE: return false;
-        case SHAPE3D_POINT: return false;
-        case SHAPE3D_CUBE: return IntersectsPlaneCube(a.plane, b.cube);
-        case SHAPE3D_SPHERE: return IntersectsPlaneSphere(a.plane, b.sphere);
-        case SHAPE3D_PLANE: return IntersectsPlanePlane(a.plane, b.plane);
-        case SHAPE3D_CAPSULE: return IntersectsPlaneCapsule(a.plane, b.capsule);
-        case SHAPE3D_MESH: return false;
+        case NONE: return false;
+        case POINT: return false;
+        case CUBE: return IntersectsPlaneCube(a.plane, b.cube);
+        case SPHERE: return IntersectsPlaneSphere(a.plane, b.sphere);
+        case PLANE: return IntersectsPlanePlane(a.plane, b.plane);
+        case CAPSULE: return IntersectsPlaneCapsule(a.plane, b.capsule);
+        case MESH: return false;
         }
 
-    case SHAPE3D_CAPSULE:
+    case CAPSULE:
         switch (b.type) {
-        case SHAPE3D_NONE: return false;
-        case SHAPE3D_POINT: return false;
-        case SHAPE3D_CUBE: return IntersectsCapsuleCube(a.capsule, b.cube);
-        case SHAPE3D_SPHERE: return IntersectsCapsuleSphere(a.capsule, b.sphere);
-        case SHAPE3D_PLANE: return IntersectsCapsulePlane(a.capsule, b.plane);
-        case SHAPE3D_CAPSULE: return IntersectsCapsuleCapsule(a.capsule, b.capsule);
-        case SHAPE3D_MESH: return false;
+        case NONE: return false;
+        case POINT: return false;
+        case CUBE: return IntersectsCapsuleCube(a.capsule, b.cube);
+        case SPHERE: return IntersectsCapsuleSphere(a.capsule, b.sphere);
+        case PLANE: return IntersectsCapsulePlane(a.capsule, b.plane);
+        case CAPSULE: return IntersectsCapsuleCapsule(a.capsule, b.capsule);
+        case MESH: return false;
         }
 
-    case SHAPE3D_MESH: return false;
+    case MESH: return false;
     }
 
     return false;
 }
 
-enum Shape3DPivot {
-    SP3_TOP_LEFT_CENTER,
-    SP3_TOP_CENTER_CENTER,
-    SP3_TOP_RIGHT_CENTER,
-    SP3_CENTER_LEFT_CENTER,
-    SP3_CENTER_CENTER,
-    SP3_CENTER_RIGHT_CENTER,
-    SP3_BOT_LEFT_CENTER,
-    SP3_BOT_CENTER_CENTER,
-    SP3_BOT_RIGHT_CENTER,
+enum class Shape3DPivot {
+    TOP_LEFT_CENTER,
+    TOP_CENTER_CENTER,
+    TOP_RIGHT_CENTER,
+    CENTER_LEFT_CENTER,
+    CENTER_CENTER,
+    CENTER_RIGHT_CENTER,
+    BOT_LEFT_CENTER,
+    BOT_CENTER_CENTER,
+    BOT_RIGHT_CENTER,
 
-    SP3_TOP_LEFT_FRONT,
-    SP3_TOP_CENTER_FRONT,
-    SP3_TOP_RIGHT_FRONT,
-    SP3_CENTER_LEFT_FRONT,
-    SP3_CENTER_FRONT_FRONT,
-    SP3_CENTER_RIGHT_FRONT,
-    SP3_BOT_LEFT_FRONT,
-    SP3_BOT_CENTER_FRONT,
-    SP3_BOT_RIGHT_FRONT,
+    TOP_LEFT_FRONT,
+    TOP_CENTER_FRONT,
+    TOP_RIGHT_FRONT,
+    CENTER_LEFT_FRONT,
+    CENTER_FRONT_FRONT,
+    CENTER_RIGHT_FRONT,
+    BOT_LEFT_FRONT,
+    BOT_CENTER_FRONT,
+    BOT_RIGHT_FRONT,
 
-    SP3_TOP_LEFT_BACK,
-    SP3_TOP_CENTER_BACK,
-    SP3_TOP_RIGHT_BACK,
-    SP3_CENTER_LEFT_BACK,
-    SP3_CENTER_BACK,
-    SP3_CENTER_RIGHT_BACK,
-    SP3_BOT_LEFT_BACK,
-    SP3_BOT_CENTER_BACK,
-    SP3_BOT_RIGHT_BACK,
+    TOP_LEFT_BACK,
+    TOP_CENTER_BACK,
+    TOP_RIGHT_BACK,
+    CENTER_LEFT_BACK,
+    CENTER_BACK,
+    CENTER_RIGHT_BACK,
+    BOT_LEFT_BACK,
+    BOT_CENTER_BACK,
+    BOT_RIGHT_BACK,
 
-    SP3_COUNT
+    COUNT
 };
 
-void DrawCube(Box c, Color color = Black, Shape3DPivot pivot = {}, f32 thickness = {}, f32 rot = {}, f32 line = {}) {
+void DrawCube(Box          c,
+              Color        color     = Black,
+              Shape3DPivot pivot     = {},
+              f32          thickness = {},
+              f32          rot       = {},
+              f32          line      = {}) {
     printf("TODO\n");
     return;
 }

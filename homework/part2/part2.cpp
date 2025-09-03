@@ -1,14 +1,15 @@
 #define ENABLE_PROFILER 1
 
+#include "os.cpp"
+
 #include "graphics.hpp"
 #include "haversine.hpp"
 
-global const u32 seed = 123456789u;
-
 i32 main(i32 argc, cstr* argv) {
+    OS::InitializeMetrics();
     Arena::Perm(MB(1024));
-    srand(seed);
-    PROFILER_NEW("Haversine Sum");
+    Rand::Init();
+    Profiler::New("Haversine Sum");
 
     int pairCount = 0;
     if (argc >= 2) {
