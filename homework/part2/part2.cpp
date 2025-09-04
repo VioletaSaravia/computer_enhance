@@ -5,7 +5,7 @@
 #include "graphics.hpp"
 #include "haversine.hpp"
 
-i32 main(i32 argc, cstr* argv) {
+i32 main(i32 argc, cstr argv[]) {
     OS::InitializeMetrics();
     Arena::Perm(MB(1024));
     Rand::Init();

@@ -3,13 +3,16 @@
 #include "os.hpp"
 #include "types.hpp"
 
-#ifndef PERM_MEMORY_SIZE
-#define PERM_MEMORY_SIZE MB(1024)
-#endif
+// #ifndef PERM_MEMORY_SIZE
+// #define PERM_MEMORY_SIZE MB(1024)
+// #endif
 
-#ifndef TEMP_MEMORY_SIZE
-#define TEMP_MEMORY_SIZE MB(32)
-#endif
+// #ifndef TEMP_MEMORY_SIZE
+// #define TEMP_MEMORY_SIZE MB(32)
+// #endif
+
+static constexpr int TEMP_MEMORY_SIZE = MB(32);
+static constexpr int PERM_MEMORY_SIZE = MB(1024);
 
 struct Arena : ISingleton {
     u8* data;
@@ -18,9 +21,10 @@ struct Arena : ISingleton {
 
     Arena(u64 size) : data{OS::Alloc(size)}, gen{1}, len{0}, cap{size} {}
 
-    static Arena& Perm(u64 initSize = PERM_MEMORY_SIZE) {
-        static Arena arena(initSize);
+    static void Init(u64 permSize = PERM_MEMORY_SIZE, u64 tempSize = TEMP_MEMORY_SIZE) {}
 
+    inline static Arena& Perm(u64 initSize = PERM_MEMORY_SIZE) {
+        static Arena arena(initSize);
         return arena;
     }
 
@@ -30,23 +34,21 @@ struct Arena : ISingleton {
     }
 
     template <typename T> struct Handle {
-        u32 gen, id;
+        u32 gen, idx;
 
-        Handle() : gen{0}, id{0} {}
-        Handle(T* ptr) : gen{Arena::Perm().gen}, id{u32((u8*)ptr - (u8*)Arena::Perm().data)} {}
+        Handle() : gen{0}, idx{0} {}
+        Handle(T* ptr) : gen{Arena::Perm().gen}, idx{u32((u8*)ptr - (u8*)Arena::Perm().data)} {}
 
-        T* ToPtr() { return (T*)(&Arena::Perm().data[this->id]); }
-        T& operator*() { return *ToPtr(); }
-        T* operator->() { return ToPtr(); }
+        T*       ToPtr() { return (T*)(&Arena::Perm().data[this->idx]); }
+        const T* ToConstPtr() const { return (const T*)(&Arena::Perm().data[this->idx]); }
+        T&       operator*() { return *ToPtr(); }
+        T*       operator->() { return ToPtr(); }
 
         // TODO MultiHandle<T> ?
         T& operator[](size_t index) { return *(ToPtr() + index); }
-
         operator T*() { return ToPtr(); }
-        operator const T*() const { return (const T*)(&Arena::Perm().data[this->id]); }
+        operator const T*() const { return (const T*)(&Arena::Perm().data[this->idx]); }
 
-        operator bool() const { return gen != 0; }
-        bool operator!() const { return gen == 0; }
         bool NotNull() const { return bool(this); }
     };
 
@@ -61,6 +63,15 @@ struct Arena : ISingleton {
         return Handle(result);
     }
 
+    struct ArenaScope {
+        Arena* arena;
+        u64    mark;
+
+        ~ArenaScope() { arena->len = mark; }
+    };
+
+    ArenaScope Scope() { return ArenaScope{.arena = this, .mark = this->len}; }
+
     void Clear() { len = 0; }
 };
 
@@ -70,7 +81,8 @@ template <typename T> struct Array {
     inline static T Empty = {};
 
     Handle<T> data;
-    u64       len, cap;
+    u64       len;
+    u64       cap;
 
     Handle<Array<T>> next;
 
@@ -158,7 +170,7 @@ template <typename T> struct Array {
 
 // TODO fails because const strings are not in arena :/
 struct String : Array<u8> {
-    cstr Cstr() { return (cstr)(this->data.ToPtr()); }
+    cstr Cstr() { return (cstr)(this->data.ToConstPtr()); }
     // String(cstr str) : Array<u8>{.data = (u8*)(str), .len = strlen(str), .cap = len} {}
 };
 
