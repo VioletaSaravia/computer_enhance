@@ -1,7 +1,7 @@
 #pragma once
 
-#include "io.hpp"
 #include "containers.hpp"
+#include "io.hpp"
 
 typedef struct {
     f64 x0, y0, x1, y1;
@@ -13,7 +13,8 @@ f64 Haversine(HaversinePair p, f64 radius) {
     const Rad lat1 = Deg(p.y0);
     const Rad lat2 = Deg(p.y1);
 
-    const f64 a = pow(sin(f32(dLat) * 0.5f), 2.0) + cos(f32(lat1)) * cos(f32(lat2)) * pow(sin(f32(dLon) * 0.5f), 2.0f);
+    const f64 a = pow(sin(f32(dLat) * 0.5f), 2.0) +
+                  cos(f32(lat1)) * cos(f32(lat2)) * pow(sin(f32(dLon) * 0.5f), 2.0f);
     const f64 c = 2.0 * asin(sqrt(a));
     return radius * c;
 }

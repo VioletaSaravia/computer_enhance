@@ -104,8 +104,8 @@ struct Profiler {
         Initialized = false;
 
         f64 totalTime = f64(OS::ReadTimer() - start) / f64(OS::GetTimerFreq());
-        
-        INFO("Finished profiler %s in %.6f seconds", name, totalTime);
+
+        INFO("Finished %s in %.6f seconds", name, totalTime);
         printf(" %-24s \t| %-25s \t| %-25s \t| %-12s\n",
                "Name[n]",
                "Time (Ex)",
@@ -187,7 +187,7 @@ struct RepetitionProfiler {
             .max        = {},
             .avg        = {},
             .current    = {},
-            .all        = (RepBlock*)malloc(sizeof(RepBlock) * maxRepeats),
+            .all        = (RepBlock*)OS::Alloc(sizeof(RepBlock) * maxRepeats),
             .repeats    = 0,
             .maxRepeats = maxRepeats,
         };
@@ -208,17 +208,16 @@ struct RepetitionProfiler {
             this->min = this->current;
         }
 
-        if (this->current.time > this->max.time || this->max.time == 0) {
+        if (this->current.time >= this->max.time) {
             this->max = this->current;
         }
 
-        this->all[this->repeats] = this->current;
-        this->repeats++;
-        this->current = {};
+        this->all[this->repeats++] = this->current;
+        this->current              = {};
     }
 
     ~RepetitionProfiler() {
-        INFO("Finished profiler %s after %llu repeats.", this->name, this->repeats);
+        INFO("Finished %s after %llu repeats.", this->name, this->repeats);
 
         // MIN
         f64 minTime = f64(this->min.time) / f64(OS::GetTimerFreq());
@@ -265,7 +264,7 @@ struct RepetitionProfiler {
                meanPageFaults);
 
         printf("\n");
-        free(all);
+        OS::Free(all);
     }
 };
 

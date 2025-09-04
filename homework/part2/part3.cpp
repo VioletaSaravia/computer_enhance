@@ -13,7 +13,7 @@ i32 main(i32 argc, cstr* argv) {
     GenerateHaversineJson(count, "input.json");
 
     u8* testData = (u8*)OS::Alloc(count);
-    REPETITION_PROFILE("WriteToBytes w/ raw ptr", 100);
+    REPETITION_PROFILE("WriteToBytes w/ raw ptr", 30);
     {
         for (size_t i = 0; i < count; i++) {
             testData[i] = u8(i);
@@ -22,9 +22,10 @@ i32 main(i32 argc, cstr* argv) {
         REPETITION_BANDWIDTH(count);
     }
     REPETITION_END();
+    OS::Free(testData);
 
     auto someData = Array<u8>::New(count);
-    REPETITION_PROFILE("WriteToBytes w/ Array<u8>", 100);
+    REPETITION_PROFILE("WriteToBytes w/ Array<u8>", 30);
     {
         for (size_t i = 0; i < someData.cap; i++) {
             someData[i] = u8(i);
@@ -33,9 +34,10 @@ i32 main(i32 argc, cstr* argv) {
         REPETITION_BANDWIDTH(someData.cap);
     }
     REPETITION_END();
+    Arena::Perm().Clear();
 
     Array<u8> file;
-    REPETITION_PROFILE("ReadEntireFile", 100);
+    REPETITION_PROFILE("ReadEntireFile", 30);
     {
         if (ENABLE_PROFILER) Arena::Perm().Clear();
         file = ReadEntireFile("input.json");
@@ -43,15 +45,16 @@ i32 main(i32 argc, cstr* argv) {
         REPETITION_BANDWIDTH(file.cap);
     }
     REPETITION_END();
+    INFO("FAULTS: %llu", OS::ReadPageFaultCount());
 
-    // REPETITION_PROFILE("ParseHaversineJson", 100);
-    // {
-    //     auto _ = ParseHaversineJson(file, count);
-
-    //     REPETITION_BANDWIDTH(file.cap);
-    //     if (ENABLE_PROFILER) Arena::Perm().Clear();
-    // }
-    // REPETITION_END();
+    REPETITION_PROFILE("ParseHaversineJson", 10);
+    {
+        auto parsed = ParseHaversineJson(file, count);
+        REPETITION_BANDWIDTH(file.cap);
+        Arena::Perm().len -= parsed.len * sizeof(HaversinePair);
+    }
+    REPETITION_END();
+    INFO("FAULTS: %llu", OS::ReadPageFaultCount());
 
     return 0;
 }

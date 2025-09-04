@@ -5,6 +5,14 @@
 
 namespace OS {
 
+u8* Alloc(u64 size) {
+    return (u8*)VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+}
+
+bool Free(void* ptr) {
+    return VirtualFree(ptr, 0, MEM_RELEASE);
+}
+
 u64 GetTimerFreq() {
     LARGE_INTEGER Freq = {};
 
@@ -51,10 +59,6 @@ void InitializeMetrics(void) {
         OSMetrics::Get().ProcessHandle =
             OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
     }
-}
-
-u8* Alloc(u64 size) {
-    return (u8*)VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 }
 
 }; // namespace OS

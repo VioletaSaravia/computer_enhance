@@ -4,7 +4,9 @@
 
 namespace OS {
 
-u8* Alloc(u64 size);
+u8*  Alloc(u64 size);
+bool Free(void* ptr);
+
 u64 GetTimerFreq();
 u64 ReadTimer();
 

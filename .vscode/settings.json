@@ -18,6 +18,8 @@
         "chrono": "cpp",
         "random": "cpp",
         "algorithm": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "charconv": "cpp",
+        "xmemory": "cpp"
     }
 }

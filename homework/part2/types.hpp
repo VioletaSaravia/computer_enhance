@@ -33,7 +33,7 @@
 #define COL_FATAL "\033[41m\033[97m" // White on Red background
 
 #define INFO(msg, ...)                                                                             \
-    printf(COL_INFO "[INFO]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
+    printf(COL_INFO "[INFO]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define WARN(msg, ...)                                                                             \
     printf(COL_WARN "[WARN]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define ERR(msg, ...)                                                                              \
