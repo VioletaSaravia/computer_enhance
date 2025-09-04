@@ -24,6 +24,7 @@ i32 main(i32 argc, cstr* argv) {
     REPETITION_END();
     OS::Free(testData);
 
+    // u64  len      = Arena::Perm().len;
     auto someData = Array<u8>::New(count);
     REPETITION_PROFILE("WriteToBytes w/ Array<u8>", 30);
     {
@@ -34,7 +35,7 @@ i32 main(i32 argc, cstr* argv) {
         REPETITION_BANDWIDTH(someData.cap);
     }
     REPETITION_END();
-    Arena::Perm().Clear();
+    Arena::Perm().len = someData.data.id;
 
     Array<u8> file;
     REPETITION_PROFILE("ReadEntireFile", 30);
@@ -45,16 +46,15 @@ i32 main(i32 argc, cstr* argv) {
         REPETITION_BANDWIDTH(file.cap);
     }
     REPETITION_END();
-    INFO("FAULTS: %llu", OS::ReadPageFaultCount());
 
     REPETITION_PROFILE("ParseHaversineJson", 10);
     {
+        // u64  len    = Arena::Perm().len;
         auto parsed = ParseHaversineJson(file, count);
         REPETITION_BANDWIDTH(file.cap);
-        Arena::Perm().len -= parsed.len * sizeof(HaversinePair);
+        Arena::Perm().len = parsed.data.id;
     }
     REPETITION_END();
-    INFO("FAULTS: %llu", OS::ReadPageFaultCount());
 
     return 0;
 }

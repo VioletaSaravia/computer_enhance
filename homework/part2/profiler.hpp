@@ -173,29 +173,35 @@ i32 ByPageFaults(const void* from, const void* to) {
 }
 }
 
+static f64 ToGb(f64 bytes) {
+    return bytes / 1024.0 / 1024.0 / 1024.0;
+}
+
 struct RepetitionProfiler {
     cstr name;
 
-    RepBlock  min, max, avg, current;
-    RepBlock* all;
-    u64       repeats, maxRepeats;
+    RepBlock first, min, max, avg, current;
+    u64      repeats, maxRepeats;
 
-    static RepetitionProfiler New(cstr name, u64 maxRepeats = 1000) {
+    static RepetitionProfiler New(cstr name, u64 maxRepeats = 100) {
         return RepetitionProfiler{
             .name       = name,
+            .first      = {},
             .min        = {},
             .max        = {},
             .avg        = {},
             .current    = {},
-            .all        = (RepBlock*)OS::Alloc(sizeof(RepBlock) * maxRepeats),
             .repeats    = 0,
             .maxRepeats = maxRepeats,
         };
     }
 
     void BeginRep() {
-        this->current.time       = OS::ReadTimer();
-        this->current.pageFaults = OS::ReadPageFaultCount();
+        this->current = {
+            .time       = OS::ReadTimer(),
+            .bytes      = 0,
+            .pageFaults = OS::ReadPageFaultCount(),
+        };
     }
 
     void AddBytes(u64 bytes) { this->current.bytes += bytes; }
@@ -212,59 +218,51 @@ struct RepetitionProfiler {
             this->max = this->current;
         }
 
-        this->all[this->repeats++] = this->current;
-        this->current              = {};
+        this->avg.bytes += this->current.bytes;
+        this->avg.time += this->current.time;
+        this->avg.pageFaults += this->current.pageFaults;
+
+        if (this->repeats == 0) this->first = this->current;
+
+        this->repeats++;
     }
 
     ~RepetitionProfiler() {
         INFO("Finished %s after %llu repeats.", this->name, this->repeats);
 
+        // FIRST
+        f64 firstTime = f64(this->first.time) / f64(OS::GetTimerFreq());
+        printf("\t> Initial: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
+               firstTime * 1000.0,
+               ToGb(f64(first.bytes) / firstTime),
+               first.pageFaults);
+
         // MIN
         f64 minTime = f64(this->min.time) / f64(OS::GetTimerFreq());
-        printf("\t> Min: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
+        printf("\t> Fastest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                minTime * 1000.0,
-               f64(this->min.bytes) / minTime / 1024.0 / 1024.0 / 1024.0,
-               this->min.pageFaults);
+               ToGb(f64(min.bytes) / minTime),
+               min.pageFaults);
 
         // MAX
         f64 maxTime = f64(this->max.time) / f64(OS::GetTimerFreq());
-        printf("\t> Max: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
+        printf("\t> Slowest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                maxTime * 1000.0,
-               f64(this->max.bytes) / maxTime / 1024.0 / 1024.0 / 1024.0,
-               this->max.pageFaults);
+               ToGb(f64(max.bytes) / maxTime),
+               max.pageFaults);
 
         // AVERAGE
-        for (u64 i = 0; i < repeats; i++) {
-            this->avg.time += all[i].time;
-            this->avg.bytes += all[i].bytes;
-            this->avg.pageFaults += all[i].pageFaults;
-        }
         f64 avgBytes  = f64(avg.bytes) / f64(repeats);
         f64 avgFaults = f64(avg.pageFaults) / f64(repeats);
         f64 avgTime   = f64(avg.time) / f64(repeats);
         avgTime /= f64(OS::GetTimerFreq());
 
-        printf("\t> Avg: \t%.3f ms\t%.3f GB/s\t%.2f pf\n",
+        printf("\t> Average: \t%.3f ms\t%.3f GB/s\t%.2f pf\n",
                avgTime * 1000.0,
-               f64(avgBytes) / avgTime / 1024.0 / 1024.0 / 1024.0,
+               ToGb(f64(avgBytes) / avgTime),
                avgFaults);
 
-        // MEAN
-        qsort(all, repeats, sizeof(RepBlock), ByTime);
-        f64 meanTime = all[repeats / 2].time / f64(OS::GetTimerFreq());
-
-        // qsort(all, repeats, sizeof(RepBlock), ByBytes);
-        f64 meanBytes = all[repeats / 2].bytes;
-
-        qsort(all, repeats, sizeof(RepBlock), ByPageFaults);
-        u64 meanPageFaults = all[repeats / 2].pageFaults;
-        printf("\t> Mean:\t%.3f ms\t%.3f GB/s\t%llu pf\n",
-               meanTime * 1000.0,
-               f64(meanBytes) / meanTime / 1024.0 / 1024.0 / 1024.0,
-               meanPageFaults);
-
         printf("\n");
-        OS::Free(all);
     }
 };
 

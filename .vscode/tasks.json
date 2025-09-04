@@ -6,6 +6,8 @@
             "command": "cl.exe",
             "args": [
                 "/Zi",
+                // "/O2",
+                // "/Ot",
                 "/std:c++20",
                 "/EHsc",
                 "/nologo",
