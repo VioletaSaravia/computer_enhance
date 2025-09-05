@@ -32,16 +32,43 @@
 #define COL_ERROR "\033[31m"         // Red
 #define COL_FATAL "\033[41m\033[97m" // White on Red background
 
+typedef const char* cstr;
+
+struct Logger {
+    FILE* file;
+
+    void Log(cstr format, ...) {
+        va_list args;
+        va_start(args, format);
+
+        if (file) {
+            fprintf(file, format, args);
+            // fflush(file); // optional, ensures it is written immediately
+        } else {
+            printf(format, args);
+        }
+
+        va_end(args);
+    }
+
+    Logger(cstr path = NULL) : file{fopen(path, "w")} {}
+    ~Logger() {
+        if (file) fclose(file);
+    }
+};
+
+static Logger FileLogger("");
+
 #define INFO(msg, ...)                                                                             \
-    printf(COL_INFO "[INFO]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
+    printf(COL_INFO "[INFO]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define WARN(msg, ...)                                                                             \
-    printf(COL_WARN "[WARN]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
+    printf(COL_WARN "[WARN]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define ERR(msg, ...)                                                                              \
-    printf(COL_ERROR "[ERROR]" COL_RESET "[%s] " msg "\n", __func__, ##__VA_ARGS__)
+    printf(COL_ERROR "[ERROR]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define FATAL(msg, ...)                                                                            \
     do {                                                                                           \
         printf(COL_FATAL "[FATAL]" COL_RESET " [%s:%d] " msg "\n",                                 \
-               __FILE__,                                                                           \
+               __func__,                                                                           \
                __LINE__,                                                                           \
                ##__VA_ARGS__);                                                                     \
         abort();                                                                                   \
@@ -77,8 +104,6 @@ struct Rand {
         srand(_seed);
     }
 };
-
-typedef const char* cstr;
 
 struct v2 {
     f32 x, y;
@@ -451,8 +476,9 @@ constexpr auto TB(Integral auto val) {
 }
 
 struct ISingleton {
-    ISingleton()                             = default;
-    ~ISingleton()                            = default;
+    ISingleton()  = default;
+    ~ISingleton() = default;
+
     ISingleton(const ISingleton&)            = delete;
     ISingleton(ISingleton&&)                 = delete;
     ISingleton& operator=(const ISingleton&) = delete;

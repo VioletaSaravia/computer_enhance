@@ -4,23 +4,36 @@
 
 #include "haversine.hpp"
 
-// TODO
-// COUNT CYCLES IN LOOP ITERATION
+AppInfo Info{
+    .permMemorySize = MB(512),
+    .tempMemorySize = TEMP_MEMORY_SIZE,
+};
 
 i32 main(i32 argc, cstr argv[]) {
+    OS::SystemInfo::Get().Print();
+    OS::SystemInfo::Get().Check(Info);
     OS::InitializeMetrics();
-    Arena::Perm(MB(1024));
+    Arena::Perm(Info.permMemorySize);
+    Arena::Temp(Info.tempMemorySize);
     Rand::Init();
-    INFO("CPU Freq: %.2f Ghz", f64(OS::EstimateCPUTimerFreq()) / 1000.0 / 1000.0 / 1000.0);
 
     i32 count = atoi(argc > 1 ? argv[1] : "200000");
     GenerateHaversineJson(count, "input.json");
 
     {
         auto ptr = Arena::Perm().data;
-        REPETITION_PROFILE("WriteToBytes Arena", 3);
+        REPETITION_PROFILE("WriteToBytes Arena ptr", 2);
         for (size_t i = 0; i < Arena::Perm().cap; i++) {
             ptr[i] = u8(0xCD);
+        }
+        REPETITION_BANDWIDTH(Arena::Perm().cap);
+        REPETITION_END();
+    }
+
+    {
+        REPETITION_PROFILE("WriteToBytes Arena::Perm()", 2);
+        for (size_t i = 0; i < Arena::Perm().cap; i++) {
+            Arena::Perm().data[i] = u8(0xCD);
         }
         REPETITION_BANDWIDTH(Arena::Perm().cap);
         REPETITION_END();
@@ -63,10 +76,8 @@ i32 main(i32 argc, cstr argv[]) {
         REPETITION_BANDWIDTH(file.cap);
         REPETITION_END();
     }
-    // 3.29 * 1000^3
-    // 3.83 * 1024^3
 
-    // REPETITION_PROFILE("ParseHaversineJson", 10);
+    // REPETITION_PROFILE("ParseHaversineJson", 3);
     // {
     //     // u64  len    = Arena::Perm().len;
     //     auto parsed = ParseHaversineJson(file, count);

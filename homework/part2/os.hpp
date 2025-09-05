@@ -2,6 +2,10 @@
 
 #include "types.hpp"
 
+struct AppInfo {
+    u64 permMemorySize, tempMemorySize;
+};
+
 namespace OS {
 
 u8*  Alloc(u64 size);
@@ -60,6 +64,62 @@ u64 EstimateCPUTimerFreq(void) {
     }
 
     return CPUFreq;
+};
+
+struct SystemInfo {
+    // System
+    cstr  processorArchitecture;
+    u32   numberOfProcessors;
+    u32   pageSize;
+    void* minAppAddress;
+    void* maxAppAddress;
+    u32   allocationGranularity;
+
+    f64 cpuFreq;
+
+    // Memory
+    u64 totalPhys;
+    u64 availPhys;
+    u64 totalVirtual;
+    u64 availVirtual;
+
+    // OS
+    u32 majorVersion;
+    u32 minorVersion;
+    u32 buildNumber;
+    u32 platformId;
+
+    SystemInfo();
+
+    static SystemInfo const& Get() {
+        static const SystemInfo info;
+        return info;
+    }
+
+    void Check(AppInfo& info) const {
+        if ((info.permMemorySize + info.tempMemorySize) > this->availPhys) {
+            FATAL("Insufficient available RAM: app needs at least %llu MBs, got %llu MBs",
+                  (info.permMemorySize + info.tempMemorySize) / (1024 * 1024),
+                  availPhys / (1024 * 1024));
+        };
+
+        return;
+    }
+
+    void Print() const {
+        INFO("System Information");
+        printf("\t> Platform: \t\t\tWindows %s\n", processorArchitecture);
+        printf("\t> Version: \t\t\t%u.%u.%u\n", majorVersion, minorVersion, buildNumber);
+        printf("\t> Processor Count: \t\t%u\n", numberOfProcessors);
+        printf("\t> CPU Frequency: \t\t%.2f GHz\n", cpuFreq);
+        printf("\t> Page Size: \t\t\t%u bytes\n", pageSize);
+
+        INFO("Memory Information");
+        printf("\t> Total Physical Memory: \t%llu MB\n", totalPhys / (1024 * 1024));
+        printf("\t> Available Physical Memory: \t%llu MB\n", availPhys / (1024 * 1024));
+        printf("\t> Total Virtual Memory: \t%llu MB\n", totalVirtual / (1024 * 1024));
+        printf("\t> Available Virtual Memory: \t%llu MB\n", availVirtual / (1024 * 1024));
+    }
 };
 
 }; // namespace OS

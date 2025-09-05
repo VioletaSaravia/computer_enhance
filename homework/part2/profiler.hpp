@@ -177,14 +177,14 @@ static f64 ToGb(f64 bytes) {
     return bytes / 1024.0 / 1024.0 / 1024.0;
 }
 
-struct RepetitionProfiler {
+struct RepProfiler {
     cstr name;
 
     RepBlock first, min, max, avg, current;
     u64      repeats, maxRepeats;
 
-    static RepetitionProfiler New(cstr name, u64 maxRepeats = 100) {
-        return RepetitionProfiler{
+    static RepProfiler New(cstr name, u64 maxRepeats = 100) {
+        return RepProfiler{
             .name       = name,
             .first      = {},
             .min        = {},
@@ -197,55 +197,55 @@ struct RepetitionProfiler {
     }
 
     void BeginRep() {
-        this->current = {
+        current = {
             .time       = OS::ReadTimer(),
             .bytes      = 0,
             .pageFaults = OS::ReadPageFaultCount(),
         };
     }
 
-    void AddBytes(u64 bytes) { this->current.bytes += bytes; }
+    void AddBytes(u64 bytes) { current.bytes += bytes; }
 
     void EndRep() {
-        this->current.time       = OS::ReadTimer() - this->current.time;
-        this->current.pageFaults = OS::ReadPageFaultCount() - this->current.pageFaults;
+        current.time       = OS::ReadTimer() - current.time;
+        current.pageFaults = OS::ReadPageFaultCount() - current.pageFaults;
 
-        if (this->current.time < this->min.time || this->min.time == 0) {
-            this->min = this->current;
+        if (current.time < min.time || min.time == 0) {
+            min = current;
         }
 
-        if (this->current.time >= this->max.time) {
-            this->max = this->current;
+        if (current.time >= max.time) {
+            max = current;
         }
 
-        this->avg.bytes += this->current.bytes;
-        this->avg.time += this->current.time;
-        this->avg.pageFaults += this->current.pageFaults;
+        avg.bytes += current.bytes;
+        avg.time += current.time;
+        avg.pageFaults += current.pageFaults;
 
-        if (this->repeats == 0) this->first = this->current;
+        if (repeats == 0) first = current;
 
-        this->repeats++;
+        repeats++;
     }
 
-    ~RepetitionProfiler() {
-        INFO("Finished %s after %llu repeats.", this->name, this->repeats);
+    ~RepProfiler() {
+        INFO("Finished %s after %llu repeats.", name, repeats);
 
         // FIRST
-        f64 firstTime = f64(this->first.time) / f64(OS::GetTimerFreq());
+        f64 firstTime = f64(first.time) / f64(OS::GetTimerFreq());
         printf("\t> Initial: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                firstTime * 1000.0,
                ToGb(f64(first.bytes) / firstTime),
                first.pageFaults);
 
         // MIN
-        f64 minTime = f64(this->min.time) / f64(OS::GetTimerFreq());
+        f64 minTime = f64(min.time) / f64(OS::GetTimerFreq());
         printf("\t> Fastest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                minTime * 1000.0,
                ToGb(f64(min.bytes) / minTime),
                min.pageFaults);
 
         // MAX
-        f64 maxTime = f64(this->max.time) / f64(OS::GetTimerFreq());
+        f64 maxTime = f64(max.time) / f64(OS::GetTimerFreq());
         printf("\t> Slowest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                maxTime * 1000.0,
                ToGb(f64(max.bytes) / maxTime),
@@ -261,8 +261,6 @@ struct RepetitionProfiler {
                avgTime * 1000.0,
                ToGb(f64(avgBytes) / avgTime),
                avgFaults);
-
-        printf("\n");
     }
 };
 
@@ -286,7 +284,7 @@ struct RepetitionProfiler {
 
 #define REPETITION_PROFILE(name, count)                                                            \
     do {                                                                                           \
-        auto _profiler = RepetitionProfiler::New(name, count);                                     \
+        auto _profiler = RepProfiler::New(name, count);                                            \
         while (_profiler.repeats < _profiler.maxRepeats) {                                         \
             _profiler.BeginRep();
 

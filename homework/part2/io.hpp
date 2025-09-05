@@ -26,3 +26,15 @@ Array<u8> ReadEntireFile(cstr path) {
 
     return result;
 }
+
+template <typename T> bool WriteToFile(Array<T>& data, cstr path) {
+    PROFILE_FUNCTION();
+
+    auto file = fopen(path, "wb");
+    if (!file) return false;
+
+    u64 written = fwrite(data.data, sizeof(T), data.len, file);
+
+    fclose(file);
+    return written == data.len;
+}
