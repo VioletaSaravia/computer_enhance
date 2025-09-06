@@ -1,23 +1,21 @@
 #define ENABLE_PROFILER 1
 
-#include "os.cpp"
+#include "lib/haversine.hpp"
+#include "lib/os.cpp"
+#include "engine.hpp"
 
-#include "haversine.hpp"
-
-AppInfo Info{
+AppInfo Part3 = {
     .permMemorySize = MB(512),
     .tempMemorySize = TEMP_MEMORY_SIZE,
 };
 
 i32 main(i32 argc, cstr argv[]) {
-    OS::SystemInfo::Get().Print();
-    OS::SystemInfo::Get().Check(Info);
-    OS::InitializeMetrics();
-    Arena::Perm(Info.permMemorySize);
-    Arena::Temp(Info.tempMemorySize);
-    Rand::Init();
+    InitSystem(Part3);
+    InitOSMetrics();
+    InitRandomSeed();
+    WindowCtx window = InitWindow({640, 480}, 4, 6);
 
-    i32 count = atoi(argc > 1 ? argv[1] : "200000");
+    i32 count = SDL_atoi(argc > 1 ? argv[1] : "200000");
     GenerateHaversineJson(count, "input.json");
 
     {
@@ -40,7 +38,7 @@ i32 main(i32 argc, cstr argv[]) {
     }
 
     {
-        u8* testData = (u8*)OS::Alloc(count);
+        u8* testData = (u8*)SDL_malloc(count);
         REPETITION_PROFILE("WriteToBytes w/ raw ptr", 30);
 
         for (size_t i = 0; i < count; i++) {
@@ -49,7 +47,7 @@ i32 main(i32 argc, cstr argv[]) {
 
         REPETITION_BANDWIDTH(count);
         REPETITION_END();
-        OS::Free(testData);
+        SDL_free(testData);
     }
 
     {

@@ -1,30 +1,6 @@
 #pragma once
 
-#ifdef _WIN32
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wall"
-#pragma clang diagnostic ignored "-Wextra"
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#endif
-#define _CRT_SECURE_NO_WARNINGS 1
-#include <Windows.h>
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-
-#else
-
-#include <stdlib.h>
-#include <string.h>
-
-#endif
-
-#include <assert.h>
-#include <concepts>
-#include <math.h>
-#include <stdint.h>
-#include <stdio.h>
+#include <SDL3/SDL.h>
 
 #define COL_RESET "\033[0m"
 #define COL_INFO  "\033[32m"         // Green
@@ -34,43 +10,18 @@
 
 typedef const char* cstr;
 
-struct Logger {
-    FILE* file;
-
-    void Log(cstr format, ...) {
-        va_list args;
-        va_start(args, format);
-
-        if (file) {
-            fprintf(file, format, args);
-            // fflush(file); // optional, ensures it is written immediately
-        } else {
-            printf(format, args);
-        }
-
-        va_end(args);
-    }
-
-    Logger(cstr path = NULL) : file{fopen(path, "w")} {}
-    ~Logger() {
-        if (file) fclose(file);
-    }
-};
-
-static Logger FileLogger("");
-
 #define INFO(msg, ...)                                                                             \
-    printf(COL_INFO "[INFO]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
+    SDL_Log(COL_INFO "[INFO]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define WARN(msg, ...)                                                                             \
-    printf(COL_WARN "[WARN]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
+    SDL_Log(COL_WARN "[WARN]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define ERR(msg, ...)                                                                              \
-    printf(COL_ERROR "[ERROR]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
+    SDL_Log(COL_ERROR "[ERROR]" COL_RESET " [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define FATAL(msg, ...)                                                                            \
     do {                                                                                           \
-        printf(COL_FATAL "[FATAL]" COL_RESET " [%s:%d] " msg "\n",                                 \
-               __func__,                                                                           \
-               __LINE__,                                                                           \
-               ##__VA_ARGS__);                                                                     \
+        SDL_Log(COL_FATAL "[FATAL]" COL_RESET " [%s:%d] " msg "\n",                                \
+                __func__,                                                                          \
+                __LINE__,                                                                          \
+                ##__VA_ARGS__);                                                                    \
         abort();                                                                                   \
     } while (0);
 
@@ -91,20 +42,19 @@ using i64 = int64_t;
 using f32 = float_t;
 using f64 = double_t;
 
-template <typename T>
-concept Float = std::floating_point<T>;
+// template <typename T>
+// concept Float = std::floating_point<T>;
 
-template <Float T> constexpr bool IsZero(T value, T epsilon = 0.001f) {
+template <typename T> constexpr bool IsZero(T value, T epsilon = 0.001f) {
     return fabs(value) < epsilon;
 }
 
-struct Rand {
-    static void Init(u32 _seed = 123456789u) {
-        static u32 seed = _seed;
-        srand(_seed);
-    }
-};
-
+namespace Rand {
+u32 Init(u32 seed = 123456789u) {
+    SDL_srand(seed);
+    return seed;
+}
+} // namespace Rand
 struct v2 {
     f32 x, y;
 
@@ -121,10 +71,10 @@ struct v2 {
     constexpr v2 operator*(const v2& rhs) const { return {x * rhs.x, y * rhs.y}; }
     constexpr v2 operator/(const v2& rhs) const { return {x / rhs.x, y / rhs.y}; }
 
-    constexpr v2 operator+(Float auto s) const { return {x + s, y + s}; }
-    constexpr v2 operator-(Float auto s) const { return {x - s, y - s}; }
-    constexpr v2 operator*(Float auto s) const { return {x * s, y * s}; }
-    constexpr v2 operator/(Float auto s) const { return {x / s, y / s}; }
+    constexpr v2 operator+(f32 s) const { return {x + s, y + s}; }
+    constexpr v2 operator-(f32 s) const { return {x - s, y - s}; }
+    constexpr v2 operator*(f32 s) const { return {x * s, y * s}; }
+    constexpr v2 operator/(f32 s) const { return {x / s, y / s}; }
 
     constexpr v2& operator+=(const v2& rhs) {
         x += rhs.x;
@@ -147,22 +97,22 @@ struct v2 {
         return *this;
     }
 
-    constexpr v2& operator+=(Float auto s) {
+    constexpr v2& operator+=(f32 s) {
         x += s;
         y += s;
         return *this;
     }
-    constexpr v2& operator-=(Float auto s) {
+    constexpr v2& operator-=(f32 s) {
         x -= s;
         y -= s;
         return *this;
     }
-    constexpr v2& operator*=(Float auto s) {
+    constexpr v2& operator*=(f32 s) {
         x *= s;
         y *= s;
         return *this;
     }
-    constexpr v2& operator/=(Float auto s) {
+    constexpr v2& operator/=(f32 s) {
         x /= s;
         y /= s;
         return *this;
@@ -188,10 +138,10 @@ struct v3 {
     constexpr v3 operator*(const v3& rhs) const { return {x * rhs.x, y * rhs.y, z * rhs.z}; }
     constexpr v3 operator/(const v3& rhs) const { return {x / rhs.x, y / rhs.y, z / rhs.z}; }
 
-    constexpr v3 operator+(Float auto s) const { return {x + s, y + s, z + s}; }
-    constexpr v3 operator-(Float auto s) const { return {x - s, y - s, z - s}; }
-    constexpr v3 operator*(Float auto s) const { return {x * s, y * s, z * s}; }
-    constexpr v3 operator/(Float auto s) const { return {x / s, y / s, z / s}; }
+    constexpr v3 operator+(f32 s) const { return {x + s, y + s, z + s}; }
+    constexpr v3 operator-(f32 s) const { return {x - s, y - s, z - s}; }
+    constexpr v3 operator*(f32 s) const { return {x * s, y * s, z * s}; }
+    constexpr v3 operator/(f32 s) const { return {x / s, y / s, z / s}; }
 
     constexpr v3& operator+=(const v3& rhs) {
         x += rhs.x;
@@ -218,25 +168,25 @@ struct v3 {
         return *this;
     }
 
-    constexpr v3& operator+=(Float auto s) {
+    constexpr v3& operator+=(f32 s) {
         x += s;
         y += s;
         z += s;
         return *this;
     }
-    constexpr v3& operator-=(Float auto s) {
+    constexpr v3& operator-=(f32 s) {
         x -= s;
         y -= s;
         z -= s;
         return *this;
     }
-    constexpr v3& operator*=(Float auto s) {
+    constexpr v3& operator*=(f32 s) {
         x *= s;
         y *= s;
         z *= s;
         return *this;
     }
-    constexpr v3& operator/=(Float auto s) {
+    constexpr v3& operator/=(f32 s) {
         x /= s;
         y /= s;
         z /= s;
@@ -269,10 +219,10 @@ struct v4 {
         return {x / rhs.x, y / rhs.y, z / rhs.z, w / rhs.w};
     }
 
-    constexpr v4 operator+(Float auto s) const { return {x + s, y + s, z + s, w + s}; }
-    constexpr v4 operator-(Float auto s) const { return {x - s, y - s, z - s, w - s}; }
-    constexpr v4 operator*(Float auto s) const { return {x * s, y * s, z * s, w * s}; }
-    constexpr v4 operator/(Float auto s) const { return {x / s, y / s, z / s, w / s}; }
+    constexpr v4 operator+(f32 s) const { return {x + s, y + s, z + s, w + s}; }
+    constexpr v4 operator-(f32 s) const { return {x - s, y - s, z - s, w - s}; }
+    constexpr v4 operator*(f32 s) const { return {x * s, y * s, z * s, w * s}; }
+    constexpr v4 operator/(f32 s) const { return {x / s, y / s, z / s, w / s}; }
 
     constexpr v4& operator+=(const v4& rhs) {
         x += rhs.x;
@@ -303,28 +253,28 @@ struct v4 {
         return *this;
     }
 
-    constexpr v4& operator+=(Float auto s) {
+    constexpr v4& operator+=(f32 s) {
         x += s;
         y += s;
         z += s;
         w += s;
         return *this;
     }
-    constexpr v4& operator-=(Float auto s) {
+    constexpr v4& operator-=(f32 s) {
         x -= s;
         y -= s;
         z -= s;
         w -= s;
         return *this;
     }
-    constexpr v4& operator*=(Float auto s) {
+    constexpr v4& operator*=(f32 s) {
         x *= s;
         y *= s;
         z *= s;
         w *= s;
         return *this;
     }
-    constexpr v4& operator/=(Float auto s) {
+    constexpr v4& operator/=(f32 s) {
         x /= s;
         y /= s;
         z /= s;
@@ -336,13 +286,7 @@ struct v4 {
     constexpr friend v4 operator*(float s, v4 v) { return {v.x * s, v.y * s, v.z * s, v.w * s}; }
 };
 
-template <typename T>
-concept Scalable = requires(T t, f32 s) {
-    { t * s } -> std::same_as<T>;
-    { s * t } -> std::same_as<T>;
-};
-
-template <Scalable T> struct Damped {
+template <typename T> struct Damped {
     T y, yd;
 
     Damped(T initial = {}) : y{initial}, yd{0} {}
@@ -361,8 +305,8 @@ using v4d  = Damped<v4>;
 #define DEFER(func)
 #endif
 
-static constexpr Float auto PI  = 3.14159265358979323846;
-static constexpr Float auto TAU = PI * 2;
+static constexpr f32 PI  = 3.14159265358979323846;
+static constexpr f32 TAU = PI * 2;
 
 struct Deg;
 
@@ -456,22 +400,19 @@ inline constexpr Rad::Rad(Deg deg) : value{deg.value / (180.0f / static_cast<f32
 static Deg bla = 32.0f;
 static Rad ble = bla;
 
-template <typename T>
-concept Integral = std::integral<T>;
-
-constexpr auto KB(Integral auto val) {
+template <typename T> constexpr auto KB(T val) {
     return val * 1024;
 }
 
-constexpr auto MB(Integral auto val) {
+template <typename T> constexpr auto MB(T val) {
     return KB(val) * 1024;
 }
 
-constexpr auto GB(Integral auto val) {
+template <typename T> constexpr auto GB(T val) {
     return MB(val) * 1024;
 }
 
-constexpr auto TB(Integral auto val) {
+template <typename T> constexpr auto TB(T val) {
     return GB(val) * 1024;
 }
 

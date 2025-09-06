@@ -1,96 +1,69 @@
-#include "os.hpp"
+#include "lib/os.hpp"
 
-// #define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#define _CRT_SECURE_NO_WARNINGS 1
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wall"
+#pragma clang diagnostic ignored "-Wextra"
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+#include <Windows.h>
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #include <Psapi.h>
-#include <Windows.h>
+
+#undef EXPORT
+#define EXPORT extern "C" __declspec(dllexport)
+
+OSMetrics OSMetrics::Init() {
+    return {.Initialized   = true,
+            .ProcessHandle = OpenProcess(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId())};
+}
 
 namespace OS {
 
-void PrintError(cstr call) {
-    DWORD err = GetLastError();
-    if (err == 0) {
-        printf("No error.");
-        return;
-    }
+u64 ReadCPUTimer(void) {
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64) ||           \
+    defined(__i386__) || defined(_M_IX86)
+    return __rdtsc();
 
-    LPSTR msg = NULL;
-    DWORD len = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                                   FORMAT_MESSAGE_IGNORE_INSERTS,
-                               NULL,
-                               err,
-                               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                               (LPSTR)&msg,
-                               0,
-                               NULL);
+#elif defined(__aarch64__)
+    // ARMv8 (AArch64): use CNTVCT_EL0
+    uint64_t cnt;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(cnt));
+    return cnt;
 
-    if (len) {
-        ERR("[%s] %lu: %s", call, err, msg);
-        LocalFree(msg);
-    } else {
-        ERR(" [%s] %lu (could not format message)", call, err);
-    }
+#elif defined(__arm__)
+    // ARMv7-A: use PMCCNTR (if enabled)
+    uint32_t cc;
+    __asm__ volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(cc));
+    return (uint64_t)cc;
+
+#else
+#error "Unsupported architecture"
+#endif
 }
 
-u8* Alloc(u64 size) {
-    u8* result = (u8*)VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (!result) PrintError("VirtualAlloc");
+u64 ReadPageFaultCount(OSMetrics metrics) {
+    PROCESS_MEMORY_COUNTERS_EX counters = {};
+
+    counters.cb = sizeof(counters);
+    GetProcessMemoryInfo(
+        metrics.ProcessHandle, (PROCESS_MEMORY_COUNTERS*)&counters, sizeof(counters));
+
+    u64 result = counters.PageFaultCount;
     return result;
 }
 
-bool Free(void* ptr) {
-    return VirtualFree(ptr, 0, MEM_RELEASE);
-}
-
-u64 GetTimerFreq() {
-    LARGE_INTEGER Freq = {};
-
-    bool ok = QueryPerformanceFrequency(&Freq);
-    if (!ok) printf("[ERROR] Couldn't obtain OS timer frequency\n");
-
-    return ok ? Freq.QuadPart : 0;
-}
-
-u64 ReadTimer() {
-    LARGE_INTEGER Value = {};
-
-    bool ok = QueryPerformanceCounter(&Value);
-    if (!ok) printf("[ERROR] Couldn't obtain OS timer\n");
-
-    return ok ? Value.QuadPart : 0;
-}
-
-struct OSMetrics : ISingleton {
-    bool   Initialized;
-    HANDLE ProcessHandle;
-
-    static OSMetrics& Get() {
-        static OSMetrics metrics;
-        return metrics;
-    }
-};
-
-u64 ReadPageFaultCount(void) {
-    PROCESS_MEMORY_COUNTERS_EX MemoryCounters = {};
-
-    MemoryCounters.cb = sizeof(MemoryCounters);
-    GetProcessMemoryInfo(OSMetrics::Get().ProcessHandle,
-                         (PROCESS_MEMORY_COUNTERS*)&MemoryCounters,
-                         sizeof(MemoryCounters));
-
-    u64 result = MemoryCounters.PageFaultCount;
-    return result;
-}
-
-void InitializeMetrics(void) {
-    if (!OSMetrics::Get().Initialized) {
-        OSMetrics::Get().Initialized = true;
-        OSMetrics::Get().ProcessHandle =
-            OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
-    }
-}
-
-SystemInfo::SystemInfo() {
+SystemInfo SystemInfo::Init() {
+    SystemInfo      result = {};
     SYSTEM_INFO     sysInfo;
     MEMORYSTATUSEX  memInfo;
     OSVERSIONINFOEX osInfo;
@@ -98,44 +71,44 @@ SystemInfo::SystemInfo() {
     // System
     GetSystemInfo(&sysInfo);
     // processorArchitecture = sysInfo.wProcessorArchitecture;
-    numberOfProcessors    = sysInfo.dwNumberOfProcessors;
-    pageSize              = sysInfo.dwPageSize;
-    minAppAddress         = sysInfo.lpMinimumApplicationAddress;
-    maxAppAddress         = sysInfo.lpMaximumApplicationAddress;
-    allocationGranularity = sysInfo.dwAllocationGranularity;
+    result.numberOfProcessors    = sysInfo.dwNumberOfProcessors;
+    result.pageSize              = sysInfo.dwPageSize;
+    result.allocationGranularity = sysInfo.dwAllocationGranularity;
 
-    processorArchitecture = "Unknown";
+    result.processorArchitecture = "Unknown";
     switch (sysInfo.wProcessorArchitecture) {
-    case PROCESSOR_ARCHITECTURE_AMD64: processorArchitecture = "x64 (AMD/Intel)"; break;
-    case PROCESSOR_ARCHITECTURE_INTEL: processorArchitecture = "x86"; break;
-    case PROCESSOR_ARCHITECTURE_ARM: processorArchitecture = "ARM"; break;
-    case PROCESSOR_ARCHITECTURE_ARM64: processorArchitecture = "ARM64"; break;
+    case PROCESSOR_ARCHITECTURE_AMD64: result.processorArchitecture = "x64 (AMD/Intel)"; break;
+    case PROCESSOR_ARCHITECTURE_INTEL: result.processorArchitecture = "x86"; break;
+    case PROCESSOR_ARCHITECTURE_ARM: result.processorArchitecture = "ARM"; break;
+    case PROCESSOR_ARCHITECTURE_ARM64: result.processorArchitecture = "ARM64"; break;
     }
 
-    cpuFreq = f64(OS::EstimateCPUTimerFreq()) / 1000.0 / 1000.0 / 1000.0;
+    result.cpuFreq = f64(OS::EstimateCPUTimerFreq()) / 1000.0 / 1000.0 / 1000.0;
 
     // Memory
     memInfo.dwLength = sizeof(memInfo);
     if (GlobalMemoryStatusEx(&memInfo)) {
-        totalPhys    = memInfo.ullTotalPhys;
-        availPhys    = memInfo.ullAvailPhys;
-        totalVirtual = memInfo.ullTotalVirtual;
-        availVirtual = memInfo.ullAvailVirtual;
+        result.totalPhys    = memInfo.ullTotalPhys;
+        result.availPhys    = memInfo.ullAvailPhys;
+        result.totalVirtual = memInfo.ullTotalVirtual;
+        result.availVirtual = memInfo.ullAvailVirtual;
     } else {
-        totalPhys = availPhys = totalVirtual = availVirtual = 0;
+        result.totalPhys = result.availPhys = result.totalVirtual = result.availVirtual = 0;
     }
 
     // OS
     ZeroMemory(&osInfo, sizeof(osInfo));
     osInfo.dwOSVersionInfoSize = sizeof(osInfo);
     if (GetVersionEx((OSVERSIONINFO*)&osInfo)) {
-        majorVersion = osInfo.dwMajorVersion;
-        minorVersion = osInfo.dwMinorVersion;
-        buildNumber  = osInfo.dwBuildNumber;
-        platformId   = osInfo.dwPlatformId;
+        result.majorVersion = osInfo.dwMajorVersion;
+        result.minorVersion = osInfo.dwMinorVersion;
+        result.buildNumber  = osInfo.dwBuildNumber;
+        result.platformId   = osInfo.dwPlatformId;
     } else {
-        majorVersion = minorVersion = buildNumber = platformId = 0;
+        result.majorVersion = result.minorVersion = result.buildNumber = result.platformId = 0;
     }
+
+    return result;
 }
 
 }; // namespace OS

@@ -1,10 +1,8 @@
 #pragma once
 
-#include <stdio.h>
-
-#include "containers.hpp"
-#include "os.hpp"
-#include "types.hpp"
+#include "lib/containers.hpp"
+#include "lib/os.hpp"
+#include "lib/types.hpp"
 
 struct Block {
     cstr label, file;
@@ -41,7 +39,7 @@ struct Profiler {
         Profiler::_Profiler = Profiler{
             .name   = name,
             .ended  = false,
-            .start  = OS::ReadTimer(),
+            .start  = SDL_GetPerformanceCounter(),
             .blocks = {},
             .queue  = {},
         };
@@ -53,7 +51,7 @@ struct Profiler {
         }
 
         Block* m    = &blocks[id];
-        u64    time = OS::ReadTimer();
+        u64    time = SDL_GetPerformanceCounter();
 
         if (queue.len > 0) {
             Block* prev = &blocks[queue.Last()];
@@ -83,7 +81,7 @@ struct Profiler {
     }
 
     void EndBlock() {
-        u64 now = OS::ReadTimer();
+        u64 now = SDL_GetPerformanceCounter();
 
         Block* m = &blocks[queue.Pop()];
         m->timeEx += now - m->from;
@@ -103,15 +101,15 @@ struct Profiler {
         ended       = true;
         Initialized = false;
 
-        f64 totalTime = f64(OS::ReadTimer() - start) / f64(OS::GetTimerFreq());
+        f64 totalTime = f64(SDL_GetPerformanceCounter() - start) / f64(SDL_GetPerformanceFrequency());
 
         INFO("Finished %s in %.6f seconds", name, totalTime);
-        printf(" %-24s \t| %-25s \t| %-25s \t| %-12s\n",
+        SDL_Log(" %-24s \t| %-25s \t| %-25s \t| %-12s\n",
                "Name[n]",
                "Time (Ex)",
                "Time (Inc)",
                "Bandwidth");
-        printf("-----------------------------------------------------------------------------------"
+        SDL_Log("-----------------------------------------------------------------------------------"
                "--------------------"
                "--------\n");
 
@@ -119,10 +117,10 @@ struct Profiler {
             auto next = blocks[i];
             if (next.iterations == 0) continue;
 
-            f64 nextTimeEx  = (f64(next.timeEx) / f64(OS::GetTimerFreq()));
-            f64 nextTimeInc = (f64(next.timeInc) / f64(OS::GetTimerFreq()));
+            f64 nextTimeEx  = (f64(next.timeEx) / f64(SDL_GetPerformanceFrequency()));
+            f64 nextTimeInc = (f64(next.timeInc) / f64(SDL_GetPerformanceFrequency()));
             if (next.bytesProcessed == 0) {
-                printf(" %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
+                SDL_Log(" %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t|\n",
                        next.label,
                        next.iterations,
                        nextTimeEx,
@@ -130,7 +128,7 @@ struct Profiler {
                        nextTimeInc,
                        (nextTimeInc / totalTime) * 100);
             } else {
-                printf(
+                SDL_Log(
                     " %-20s [%llu] \t| %.5f secs\t(%.2f%%) \t| %.5f secs\t(%.2f%%) \t| %.3f GB/s\n",
                     next.label,
                     next.iterations,
@@ -198,7 +196,7 @@ struct RepProfiler {
 
     void BeginRep() {
         current = {
-            .time       = OS::ReadTimer(),
+            .time       = SDL_GetPerformanceCounter(),
             .bytes      = 0,
             .pageFaults = OS::ReadPageFaultCount(),
         };
@@ -207,7 +205,7 @@ struct RepProfiler {
     void AddBytes(u64 bytes) { current.bytes += bytes; }
 
     void EndRep() {
-        current.time       = OS::ReadTimer() - current.time;
+        current.time       = SDL_GetPerformanceCounter() - current.time;
         current.pageFaults = OS::ReadPageFaultCount() - current.pageFaults;
 
         if (current.time < min.time || min.time == 0) {
@@ -231,22 +229,22 @@ struct RepProfiler {
         INFO("Finished %s after %llu repeats.", name, repeats);
 
         // FIRST
-        f64 firstTime = f64(first.time) / f64(OS::GetTimerFreq());
-        printf("\t> Initial: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
+        f64 firstTime = f64(first.time) / f64(SDL_GetPerformanceFrequency());
+        SDL_Log("\t> Initial: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                firstTime * 1000.0,
                ToGb(f64(first.bytes) / firstTime),
                first.pageFaults);
 
         // MIN
-        f64 minTime = f64(min.time) / f64(OS::GetTimerFreq());
-        printf("\t> Fastest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
+        f64 minTime = f64(min.time) / f64(SDL_GetPerformanceFrequency());
+        SDL_Log("\t> Fastest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                minTime * 1000.0,
                ToGb(f64(min.bytes) / minTime),
                min.pageFaults);
 
         // MAX
-        f64 maxTime = f64(max.time) / f64(OS::GetTimerFreq());
-        printf("\t> Slowest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
+        f64 maxTime = f64(max.time) / f64(SDL_GetPerformanceFrequency());
+        SDL_Log("\t> Slowest: \t%.3f ms\t%.3f GB/s\t%llu pf\n",
                maxTime * 1000.0,
                ToGb(f64(max.bytes) / maxTime),
                max.pageFaults);
@@ -255,9 +253,9 @@ struct RepProfiler {
         f64 avgBytes  = f64(avg.bytes) / f64(repeats);
         f64 avgFaults = f64(avg.pageFaults) / f64(repeats);
         f64 avgTime   = f64(avg.time) / f64(repeats);
-        avgTime /= f64(OS::GetTimerFreq());
+        avgTime /= f64(SDL_GetPerformanceFrequency());
 
-        printf("\t> Average: \t%.3f ms\t%.3f GB/s\t%.2f pf\n",
+        SDL_Log("\t> Average: \t%.3f ms\t%.3f GB/s\t%.2f pf\n",
                avgTime * 1000.0,
                ToGb(f64(avgBytes) / avgTime),
                avgFaults);

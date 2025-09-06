@@ -1,6 +1,8 @@
 #pragma once
 
-#include "profiler.hpp"
+#include "lib/profiler.hpp"
+
+#include <stdio.h>
 
 Array<u8> ReadEntireFile(cstr path) {
     // THE BEST WAY TO AVOID ERRORS IS NOT TO HAVE THEM
@@ -37,4 +39,8 @@ template <typename T> bool WriteToFile(Array<T>& data, cstr path) {
 
     fclose(file);
     return written == data.len;
+}
+
+bool CopyEntireFile(cstr from, cstr to) {
+    return false;
 }

@@ -1,7 +1,9 @@
 #pragma once
 
-#include "containers.hpp"
-#include "io.hpp"
+#include "lib/containers.hpp"
+#include "lib/io.hpp"
+
+#include <stdio.h>
 
 typedef struct {
     f64 x0, y0, x1, y1;
@@ -30,10 +32,6 @@ f64 SumHaversines(Array<HaversinePair> pairs) {
     return sum;
 }
 
-static f64 frand_unit() {
-    return (f64)rand() / (f64)RAND_MAX;
-}
-
 static void GenerateHaversineJson(int count, cstr path) {
     PROFILE_FUNCTION();
 
@@ -50,19 +48,19 @@ static void GenerateHaversineJson(int count, cstr path) {
         PROFILE_ADD_BANDWIDTH(3 + 6 + 6 + 6 + 6 + 4);
         fputs("\t{\n", f);
 
-        f64 v = frand_unit() * 160.0 - 80.0;
+        f64 v = SDL_randf() * 160.0 - 80.0;
         snprintf(buf, sizeof(buf), "\t\t\"x0\": %.2f,\n", v);
         fputs(buf, f);
 
-        v = frand_unit() * 160.0 - 80.0;
+        v = SDL_randf() * 160.0 - 80.0;
         snprintf(buf, sizeof(buf), "\t\t\"y0\": %.2f,\n", v);
         fputs(buf, f);
 
-        v = frand_unit() * 160.0 - 80.0;
+        v = SDL_randf() * 160.0 - 80.0;
         snprintf(buf, sizeof(buf), "\t\t\"x1\": %.2f,\n", v);
         fputs(buf, f);
 
-        v = frand_unit() * 160.0 - 80.0;
+        v = SDL_randf() * 160.0 - 80.0;
         snprintf(buf, sizeof(buf), "\t\t\"y1\": %.2f\n", v);
         fputs(buf, f);
 
@@ -151,7 +149,7 @@ Array<HaversinePair> ParseHaversineJson(Array<u8>& bytes, int expected_count = 1
             if (b == ',' || b == '}') {
                 curKey.Push('\0');
                 cstr val    = (cstr) & (*curVal.data);
-                curKv.value = strtod(val, NULL);
+                curKv.value = SDL_strtod(val, NULL);
 
                 if (strcmp(curKv.key, "x0") == 0)
                     curPair.x0 = curKv.value;
