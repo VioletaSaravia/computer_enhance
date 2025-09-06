@@ -1,23 +1,23 @@
 {
     "version": "0.2.0",
     "configurations": [
-        {
-            "name": "C/C++: clang++ build and debug active file",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${fileDirname}/build/${fileBasenameNoExtension}.exe",
-            "args": [],
-            "cwd": "${fileDirname}",
-            "preLaunchTask": "C/C++: clang++ build active file"
-        },
+        // {
+        //     "name": "C/C++: clang++ build and debug active file",
+        //     "type": "lldb",
+        //     "request": "launch",
+        //     "program": "${fileDirname}/build/${workspaceFolderBasename}.exe",
+        //     "args": [],
+        //     "cwd": "${fileDirname}",
+        //     "preLaunchTask": "C/C++: clang++ build active file"
+        // },
         {
             "name": "C/C++: cl build and debug active file",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${fileDirname}/build/${fileBasenameNoExtension}.exe",
+            "program": "${workspaceFolder}/build/debug/${workspaceFolderBasename}.exe",
             "args": [],
             "cwd": "${fileDirname}",
-            "preLaunchTask": "C/C++: cl build active file"
+            "preLaunchTask": "C/C++: cl.exe debug build"
         }
     ],
 }

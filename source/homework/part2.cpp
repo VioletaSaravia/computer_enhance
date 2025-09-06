@@ -6,14 +6,14 @@
 #include "lib/haversine.hpp"
 
 i32 main(i32 argc, cstr argv[]) {
-    OS::InitOSMetrics();
+    OSMetrics::Init();
     Arena::Perm(MB(1024));
-    Rand::InitRandomSeed();
+    Rand::Init();
     Profiler::New("Haversine Sum");
 
     int pairCount = 0;
     if (argc >= 2) {
-        pairCount = atoi(argv[1]);
+        pairCount = SDL_atoi(argv[1]);
         if (pairCount < 0) pairCount = 0;
     }
 

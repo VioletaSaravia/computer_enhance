@@ -2,7 +2,7 @@
 
 #include "lib/haversine.hpp"
 #include "lib/os.cpp"
-#include "engine.hpp"
+#include "lib/engine.hpp"
 
 AppInfo Part3 = {
     .permMemorySize = MB(512),
@@ -10,10 +10,10 @@ AppInfo Part3 = {
 };
 
 i32 main(i32 argc, cstr argv[]) {
-    InitSystem(Part3);
-    InitOSMetrics();
-    InitRandomSeed();
-    WindowCtx window = InitWindow({640, 480}, 4, 6);
+    OS::SystemInfo::Init();
+    OSMetrics::Init();
+    Rand::Init();
+    WindowCtx::Init({640, 480}, 4, 6);
 
     i32 count = SDL_atoi(argc > 1 ? argv[1] : "200000");
     GenerateHaversineJson(count, "input.json");

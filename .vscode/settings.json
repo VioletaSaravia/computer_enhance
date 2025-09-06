@@ -68,6 +68,7 @@
         "xloctime": "cpp",
         "xstring": "cpp",
         "xutility": "cpp",
-        "glad.c": "cpp"
+        "glad.c": "cpp",
+        "list": "cpp"
     }
 }

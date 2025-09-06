@@ -3,68 +3,19 @@
 #include "lib/containers.hpp"
 #include "lib/os.hpp"
 
-#include "graphics/opengl.hpp"
+#include "core/opengl.hpp"
+#include "core/window.hpp"
 
 #include "game.hpp"
 
-struct WindowCtx {
-    SDL_Window* window;
-    v2          initialResolution;
-
-    SDL_GLContext gl;
-    i32           glMajorVersion;
-    i32           glMinorVersion;
-
-    static WindowCtx Init(v2 resolution, i32 maj, i32 min) {
-        WindowCtx result = {
-            .initialResolution = resolution, .glMajorVersion = maj, .glMinorVersion = min};
-        SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
-
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, maj);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, min);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
-        result.window = SDL_CreateWindow("Game",
-                                         (i32)result.initialResolution.x,
-                                         (i32)result.initialResolution.y,
-                                         SDL_WINDOW_OPENGL);
-
-        result.gl = SDL_GL_CreateContext(result.window);
-
-        if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
-            FATAL("Failed to initialize GLAD\n");
-            SDL_GL_DestroyContext(result.gl);
-            SDL_DestroyWindow(result.window);
-            SDL_Quit();
-            return {};
-        }
-
-        return result;
-    }
-
-    void Destroy() {
-        SDL_GL_DestroyContext(gl);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-    }
-};
 
 global AppInfo App = {.permMemorySize = MB(512), .tempMemorySize = MB(32)};
 
-struct DrawCmd {
-    u32 shader, texture;
-};
-
-struct GraphicsCtx {
-    v4      clearColor;
-    DrawCmd drawQueue[64];
-};
-
 struct GameMemory {
-    OS::SystemInfo info;
-    OSMetrics      metrics;
-    WindowCtx      window;
-    GraphicsCtx    gfx;
+    OS::SystemInfo  info;
+    OSMetrics       metrics;
+    WindowCtx       window;
+    GL::GraphicsCtx gfx;
 
     u32  randomSeed;
     bool quit;
@@ -90,6 +41,7 @@ EXPORT void Init() {
     Arena::Perm(App.permMemorySize);
     Arena::Temp(App.tempMemorySize);
     Mem->window = WindowCtx::Init({640, 480}, 4, 6);
+    ImguiInit(Mem->window);
 
     Game::Init(Mem->data);
 }
@@ -97,8 +49,19 @@ EXPORT void Init() {
 void HandleEvents() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_EVENT_QUIT) {
+        ImGui_ImplSDL3_ProcessEvent(&event);
+
+        switch (event.type) {
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
+            if (event.window.windowID == SDL_GetWindowID(Mem->window.window)) Mem->quit = true;
+            break;
+        }
+        case SDL_EVENT_QUIT: {
             Mem->quit = true;
+            break;
+        }
+
+        default: break;
         }
     }
 }
@@ -106,17 +69,46 @@ void HandleEvents() {
 EXPORT void Update() {
     HandleEvents();
 
+    if (SDL_GetWindowFlags(Mem->window.window) & SDL_WINDOW_MINIMIZED) {
+        SDL_Delay(10);
+        return;
+    }
+
     Game::Update(Mem->data);
 
-    GL::Clear(Mem->gfx.clearColor);
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+
+    static bool show_demo_window = true;
+    if (show_demo_window) ImGui::ShowDemoWindow(&show_demo_window);
+
+    static bool show = true;
+    if (show) {
+
+        ImGui::Begin("Another Window", &show);
+        ImGui::Text("Hello from another window!");
+        if (ImGui::Button("Close Me")) show = false;
+        ImGui::End();
+    }
+
+    ImGui::Render();
+
     GL::Begin();
+    glViewport(0, 0, Mem->window.initialResolution.x, Mem->window.initialResolution.y);
+    GL::Clear(Mem->gfx.clearColor);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     SDL_GL_SwapWindow(Mem->window.window);
     GL::End();
 }
 
 EXPORT void Shutdown() {
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
+
     Mem->window.Destroy();
-    SDL_free(Mem);
+    SDL_Quit();
 }
 
 EXPORT bool ShouldClose() {

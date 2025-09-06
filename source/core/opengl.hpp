@@ -4,6 +4,12 @@
 
 #include "glad/glad.c"
 
+#include "imgui-1.92.2b/imgui.h"
+
+#include "imgui-1.92.2b/backends/imgui_impl_sdl3.h"
+
+#include "imgui-1.92.2b/backends/imgui_impl_opengl3.h"
+
 namespace GL {
 
 void Clear(v4 color) {
@@ -16,5 +22,14 @@ void Begin() {
 
 void End() {
 }
+
+struct DrawCmd {
+    u32 shader, texture;
+};
+
+struct GraphicsCtx {
+    v4      clearColor;
+    DrawCmd drawQueue[64];
+};
 
 } // namespace GL
