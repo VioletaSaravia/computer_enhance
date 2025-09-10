@@ -8,16 +8,15 @@ struct AppInfo {
     u64 permMemorySize, tempMemorySize;
 };
 
-struct OSMetrics {
-    bool   Initialized;
-    void* ProcessHandle;
-
-    static OSMetrics Init();
-};
-
 namespace OS {
 
-static u64 ReadPageFaultCount();
+struct Metrics {
+    bool  Initialized;
+    void* ProcessHandle;
+
+    static Metrics Init();
+    u64            ReadPageFaultCount();
+};
 
 u64 ReadCPUTimer(void);
 

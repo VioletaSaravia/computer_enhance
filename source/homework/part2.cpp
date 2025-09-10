@@ -5,10 +5,11 @@
 #include "lib/graphics.hpp"
 #include "lib/haversine.hpp"
 
-i32 main(i32 argc, cstr argv[]) {
-    OSMetrics::Init();
-    Arena::Perm(MB(1024));
+i32 Part2(i32 argc, cstr argv[]) {
+    OS::SystemInfo::Init();
+    OS::Metrics::Init();
     Rand::Init();
+
     Profiler::New("Haversine Sum");
 
     int pairCount = 0;

@@ -8,12 +8,11 @@
 
 #include "game.hpp"
 
-
 global AppInfo App = {.permMemorySize = MB(512), .tempMemorySize = MB(32)};
 
 struct GameMemory {
     OS::SystemInfo  info;
-    OSMetrics       metrics;
+    OS::Metrics     metrics;
     WindowCtx       window;
     GL::GraphicsCtx gfx;
 
@@ -28,18 +27,19 @@ struct GameMemory {
 global GameMemory* Mem;
 
 EXPORT void Init() {
+    auto info = Game::Setup();
     // SDL_SetMemoryFunctions(NULL, NULL, NULL, NULL);
-    Mem = (GameMemory*)SDL_malloc(sizeof(GameMemory) + MB(256) + MB(32)); // TODO
+    Mem = (GameMemory*)SDL_malloc(sizeof(GameMemory) + info.permMemory + info.tempMemory);
 
     Mem->info       = OS::SystemInfo::Init();
-    Mem->metrics    = OSMetrics::Init();
+    Mem->metrics    = OS::Metrics::Init();
     Mem->randomSeed = Rand::Init();
     Mem->data       = (Game::Data*)((u8*)(Mem) + sizeof(GameMemory));
     Mem->gfx        = {.clearColor = {0.4, 0, 0.6, 1}};
-    // Mem->game = Arena(MB(1)); // TODO
-    // Mem->temp = Arena(MB(1)); // TODO
-    Arena::Perm(App.permMemorySize);
-    Arena::Temp(App.tempMemorySize);
+    // Mem->perm = Arena(info.permMemory); // TODO
+    // Mem->temp = Arena(info.tempMemory); // TODO
+    Arena::Perm(info.permMemory);
+    Arena::Temp(info.tempMemory);
     Mem->window = WindowCtx::Init({640, 480}, 4, 6);
     ImguiInit(Mem->window);
 

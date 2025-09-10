@@ -153,6 +153,13 @@ template <typename T> struct Array {
         }
         return data[id];
     }
+
+    // -------- Iterator support --------
+    T* begin() { return data; }
+    T* end() { return data + len; }
+
+    const T* begin() const { return data; }
+    const T* end() const { return data + len; }
 };
 
 // TODO fails because const strings are not in arena :/

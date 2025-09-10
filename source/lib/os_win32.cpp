@@ -21,13 +21,23 @@
 #undef EXPORT
 #define EXPORT extern "C" __declspec(dllexport)
 
-OSMetrics OSMetrics::Init() {
+namespace OS {
+
+Metrics Metrics::Init() {
     return {.Initialized   = true,
             .ProcessHandle = OpenProcess(
                 PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId())};
 }
 
-namespace OS {
+u64 Metrics::ReadPageFaultCount() {
+    PROCESS_MEMORY_COUNTERS_EX counters = {};
+
+    counters.cb = sizeof(counters);
+    GetProcessMemoryInfo(ProcessHandle, (PROCESS_MEMORY_COUNTERS*)&counters, sizeof(counters));
+
+    u64 result = counters.PageFaultCount;
+    return result;
+}
 
 u64 ReadCPUTimer(void) {
 #if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64) ||           \
@@ -49,17 +59,6 @@ u64 ReadCPUTimer(void) {
 #else
 #error "Unsupported architecture"
 #endif
-}
-
-u64 ReadPageFaultCount(OSMetrics metrics) {
-    PROCESS_MEMORY_COUNTERS_EX counters = {};
-
-    counters.cb = sizeof(counters);
-    GetProcessMemoryInfo(
-        metrics.ProcessHandle, (PROCESS_MEMORY_COUNTERS*)&counters, sizeof(counters));
-
-    u64 result = counters.PageFaultCount;
-    return result;
 }
 
 SystemInfo SystemInfo::Init() {
@@ -107,6 +106,8 @@ SystemInfo SystemInfo::Init() {
     } else {
         result.majorVersion = result.minorVersion = result.buildNumber = result.platformId = 0;
     }
+
+    result.Print();
 
     return result;
 }

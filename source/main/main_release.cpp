@@ -5,8 +5,11 @@
 
 #include "game.cpp"
 
+#include "homework/part3.cpp"
+
 i32 main(i32 argc, cstr argv[]) {
-    Init();
-    while (!ShouldClose()) Update();
-    Shutdown();
+    Part3(argc, argv);
+    // Init();
+    // while (!ShouldClose()) Update();
+    // Shutdown();
 }

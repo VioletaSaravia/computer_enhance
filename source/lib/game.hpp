@@ -4,6 +4,14 @@
 
 namespace Game {
 
+struct Info {
+    cstr name;
+    u64 permMemory;
+    u64 tempMemory;
+};
+
+Info Setup();
+
 struct Data;
 
 void Init(Data*);

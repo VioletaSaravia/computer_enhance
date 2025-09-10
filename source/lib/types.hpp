@@ -52,6 +52,7 @@ template <typename T> constexpr bool IsZero(T value, T epsilon = 0.001f) {
 namespace Rand {
 u32 Init(u32 seed = 123456789u) {
     SDL_srand(seed);
+    INFO("Initialized random seed:\t%llu", seed);
     return seed;
 }
 } // namespace Rand
