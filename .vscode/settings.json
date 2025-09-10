@@ -69,6 +69,7 @@
         "xstring": "cpp",
         "xutility": "cpp",
         "glad.c": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "xhash": "cpp"
     }
 }

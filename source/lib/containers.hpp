@@ -3,26 +3,15 @@
 // #include "lib/os.hpp"
 #include "lib/types.hpp"
 
-static constexpr int TEMP_MEMORY_SIZE = MB(32);
-static constexpr int PERM_MEMORY_SIZE = MB(1024);
-
-struct Arena : ISingleton {
-    u8*       data;
-    u32       gen;
-    u64       len;
-    const u64 cap;
+struct Arena {
+    u8* data;
+    u32 gen;
+    u64 len, cap;
 
     Arena(u64 size) : data{(u8*)SDL_malloc(size)}, gen{1}, len{0}, cap{size} {}
 
-    static Arena& Perm(u64 initSize = PERM_MEMORY_SIZE) {
-        static Arena arena(initSize);
-        return arena;
-    }
-
-    static Arena& Temp(u64 initSize = TEMP_MEMORY_SIZE) {
-        static Arena arena(initSize);
-        return arena;
-    }
+    static Arena& Perm();
+    static Arena& Temp();
 
     template <typename T> struct Handle {
         u32 gen, idx;
@@ -211,4 +200,11 @@ template <typename T, unsigned int N> struct StackArray {
 
         return data[id];
     }
+
+    // -------- Iterator support --------
+    T* begin() { return data; }
+    T* end() { return data + len; }
+
+    const T* begin() const { return data; }
+    const T* end() const { return data + len; }
 };

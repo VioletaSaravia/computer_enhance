@@ -1,14 +1,22 @@
 #pragma once
 
-#include "lib/containers.hpp"
-#include "lib/os.hpp"
-
 #include "core/opengl.hpp"
 #include "core/window.hpp"
 
+#include "lib/containers.hpp"
+#include "lib/os.hpp"
+
 #include "game.hpp"
 
-global AppInfo App = {.permMemorySize = MB(512), .tempMemorySize = MB(32)};
+struct Editor {
+    StackArray<f32*, 64> tweakables;
+
+    void Show() {
+        for (auto i : tweakables) {
+            ImGui::DragFloat("var", i);
+        }
+    }
+};
 
 struct GameMemory {
     OS::SystemInfo  info;
@@ -16,8 +24,9 @@ struct GameMemory {
     WindowCtx       window;
     GL::GraphicsCtx gfx;
 
-    u32  randomSeed;
-    bool quit;
+    u32    randomSeed;
+    bool   quit;
+    Editor editor;
 
     Arena       temp;
     Arena       perm;
@@ -26,21 +35,42 @@ struct GameMemory {
 
 global GameMemory* Mem;
 
+f32 Tweak(f32* val, f32 from, f32 to) {
+    Mem->editor.tweakables.Push(val);
+    return *val;
+}
+
+Arena& Arena::Perm() {
+    return Mem->perm;
+}
+
+Arena& Arena::Temp() {
+    return Mem->temp;
+}
+
+void SDLError() {
+    cstr err = SDL_GetError();
+    ERR("%s", err);
+}
+
+void SDLFatal() {
+    cstr err = SDL_GetError();
+    FATAL("%s", err);
+}
+
 EXPORT void Init() {
-    auto info = Game::Setup();
-    // SDL_SetMemoryFunctions(NULL, NULL, NULL, NULL);
-    Mem = (GameMemory*)SDL_malloc(sizeof(GameMemory) + info.permMemory + info.tempMemory);
+    auto settings = Game::Setup();
+    Mem = (GameMemory*)SDL_malloc(sizeof(GameMemory) + settings.permMemory + settings.tempMemory);
+    if (!Mem) SDLFatal();
 
     Mem->info       = OS::SystemInfo::Init();
     Mem->metrics    = OS::Metrics::Init();
     Mem->randomSeed = Rand::Init();
     Mem->data       = (Game::Data*)((u8*)(Mem) + sizeof(GameMemory));
     Mem->gfx        = {.clearColor = {0.4, 0, 0.6, 1}};
-    // Mem->perm = Arena(info.permMemory); // TODO
-    // Mem->temp = Arena(info.tempMemory); // TODO
-    Arena::Perm(info.permMemory);
-    Arena::Temp(info.tempMemory);
-    Mem->window = WindowCtx::Init({640, 480}, 4, 6);
+    Mem->perm       = Arena(settings.permMemory);
+    Mem->temp       = Arena(settings.tempMemory);
+    Mem->window     = WindowCtx::Init(settings);
     ImguiInit(Mem->window);
 
     Game::Init(Mem->data);
@@ -64,15 +94,15 @@ void HandleEvents() {
         default: break;
         }
     }
-}
-
-EXPORT void Update() {
-    HandleEvents();
 
     if (SDL_GetWindowFlags(Mem->window.window) & SDL_WINDOW_MINIMIZED) {
         SDL_Delay(10);
         return;
     }
+}
+
+EXPORT void Update() {
+    HandleEvents();
 
     Game::Update(Mem->data);
 
@@ -85,9 +115,12 @@ EXPORT void Update() {
 
     static bool show = true;
     if (show) {
-
         ImGui::Begin("Another Window", &show);
         ImGui::Text("Hello from another window!");
+
+        // TODO
+        Mem->editor.Show();
+
         if (ImGui::Button("Close Me")) show = false;
         ImGui::End();
     }

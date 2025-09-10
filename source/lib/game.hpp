@@ -4,13 +4,14 @@
 
 namespace Game {
 
-struct Info {
+struct Settings {
     cstr name;
-    u64 permMemory;
-    u64 tempMemory;
+    v2   resolution;
+    v2   glVersion;
+    u64  permMemory, tempMemory;
 };
 
-Info Setup();
+Settings Setup();
 
 struct Data;
 

@@ -13,32 +13,33 @@ extern "C" void NOP1x3AllBytes(u64 Count, u8* Data);
 extern "C" void NOP1x9AllBytes(u64 Count, u8* Data);
 
 i32 Part3(i32 argc, cstr argv[]) {
-    auto info          = OS::SystemInfo::Init();
-    PlaceholderMetrics = OS::Metrics::Init();
-    auto seed          = Rand::Init();
+    // auto info          = OS::SystemInfo::Init();
+    // PlaceholderMetrics = OS::Metrics::Init();
+    // auto seed          = Rand::Init();
+    Init();
 
     i32 count   = SDL_atoi(argc > 1 ? argv[1] : "200000");
     i32 repeats = SDL_atoi(argc > 2 ? argv[2] : "50");
     GenerateHaversineJson(count, "input.json");
 
-    // {
-    //     auto ptr = Arena::Perm().data;
-    //     REPETITION_PROFILE("WriteToBytes Arena ptr", 2);
-    //     for (size_t i = 0; i < Arena::Perm().cap; i++) {
-    //         ptr[i] = u8(0xCD);
-    //     }
-    //     REPETITION_BANDWIDTH(Arena::Perm().cap);
-    //     REPETITION_END();
-    // }
+    {
+        auto ptr = Mem->perm.data;
+        REPETITION_PROFILE("WriteToBytes Arena ptr", 2);
+        for (size_t i = 0; i < Mem->perm.cap; i++) {
+            ptr[i] = u8(0xCD);
+        }
+        REPETITION_BANDWIDTH(Mem->perm.cap);
+        REPETITION_END();
+    }
 
-    // {
-    //     REPETITION_PROFILE("WriteToBytes Arena::Perm()", 2);
-    //     for (size_t i = 0; i < Arena::Perm().cap; i++) {
-    //         Arena::Perm().data[i] = u8(0xCD);
-    //     }
-    //     REPETITION_BANDWIDTH(Arena::Perm().cap);
-    //     REPETITION_END();
-    // }
+    {
+        REPETITION_PROFILE("WriteToBytes Mem->perm", 2);
+        for (size_t i = 0; i < Mem->perm.cap; i++) {
+            Mem->perm.data[i] = u8(0xCD);
+        }
+        REPETITION_BANDWIDTH(Mem->perm.cap);
+        REPETITION_END();
+    }
 
     {
         u8* testData = (u8*)SDL_malloc(count);
@@ -125,7 +126,7 @@ i32 Part3(i32 argc, cstr argv[]) {
     }
 
     {
-        auto scope    = Arena::Perm().Scope();
+        auto scope    = Mem->perm.Scope();
         auto someData = Array<u8>::New(count);
 
         REPETITION_PROFILE("WriteToBytes w/ Array<u8>", repeats);
@@ -138,7 +139,7 @@ i32 Part3(i32 argc, cstr argv[]) {
     }
 
     {
-        auto scope    = Arena::Perm().Scope();
+        auto scope    = Mem->perm.Scope();
         auto someData = Array<u8>::New(count);
         someData.len  = someData.cap;
 
@@ -154,7 +155,7 @@ i32 Part3(i32 argc, cstr argv[]) {
     }
 
     {
-        auto scope    = Arena::Perm().Scope();
+        auto scope    = Mem->perm.Scope();
         auto someData = Array<u8>::New(count);
         someData.len  = someData.cap;
 
@@ -168,12 +169,12 @@ i32 Part3(i32 argc, cstr argv[]) {
     }
 
     {
-        auto scope = Arena::Perm().Scope();
+        auto scope = Mem->perm.Scope();
 
         Array<u8> file;
         REPETITION_PROFILE("ReadEntireFile", repeats);
         {
-            auto scope2 = Arena::Perm().Scope(); // careful
+            auto scope2 = Mem->perm.Scope(); // careful
             file        = ReadEntireFile("input.json");
 
             REPETITION_BANDWIDTH(file.cap);
@@ -183,7 +184,7 @@ i32 Part3(i32 argc, cstr argv[]) {
         Array<HaversinePair> parsed;
         REPETITION_PROFILE("ParseHaversineJson", 5);
         {
-            auto scope2 = Arena::Perm().Scope(); // careful
+            auto scope2 = Mem->perm.Scope(); // careful
             parsed      = ParseHaversineJson(file, count);
 
             REPETITION_BANDWIDTH(file.cap);

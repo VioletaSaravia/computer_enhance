@@ -1,17 +1,15 @@
 #include "lib/game.hpp"
 #include <concepts>
 
-template <typename T> T Tweak(T val, T from, T to) {
-    return val + T(1);
-}
-
 struct Game::Data {
-    u8 someNum = Tweak<u8>(0xCD, 0, 64);
+    f32 someNum = Tweak(&someNum, 0.0f, 64.0f);
 };
 
-Game::Info Game::Setup() {
-    return Game::Info{
+Game::Settings Game::Setup() {
+    return Game::Settings{
         .name       = "Test",
+        .resolution = {640, 480},
+        .glVersion  = {4, 6},
         .permMemory = MB(512),
         .tempMemory = MB(32),
     };

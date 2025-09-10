@@ -1,9 +1,10 @@
 #pragma once
 
+#include "core/opengl.hpp"
+
 #include "lib/containers.hpp"
 #include "lib/os.hpp"
-
-#include "core/opengl.hpp"
+#include "lib/game.hpp"
 
 struct WindowCtx {
     SDL_Window* window;
@@ -13,17 +14,18 @@ struct WindowCtx {
     i32           glMajorVersion;
     i32           glMinorVersion;
 
-    static WindowCtx Init(v2 resolution, i32 maj, i32 min) {
-        WindowCtx result = {
-            .initialResolution = resolution, .glMajorVersion = maj, .glMinorVersion = min};
+    static WindowCtx Init(Game::Settings settings) {
+        WindowCtx result = {.initialResolution = settings.resolution,
+                            .glMajorVersion    = (i32)(settings.glVersion.x),
+                            .glMinorVersion    = (i32)(settings.glVersion.y)};
         SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
 
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, maj);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, min);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, result.glMajorVersion);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, result.glMinorVersion);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
         f32 mainScale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
-        result.window = SDL_CreateWindow("Game",
+        result.window = SDL_CreateWindow(settings.name,
                                          (i32)(result.initialResolution.x * mainScale),
                                          (i32)(result.initialResolution.y * mainScale),
                                          SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
