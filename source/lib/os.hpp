@@ -48,23 +48,17 @@ u64 EstimateCPUTimerFreq(void) {
 struct SystemInfo {
     // System
     cstr processorArchitecture;
-    u32  numberOfProcessors;
-    u32  pageSize;
-    u32  allocationGranularity;
-
-    f64 cpuFreq;
+    u32  numberOfProcessors, pageSize, allocationGranularity;
+    f64  cpuFreq;
 
     // Memory
-    u64 totalPhys;
-    u64 availPhys;
-    u64 totalVirtual;
-    u64 availVirtual;
+    u64 totalPhys, availPhys, totalVirtual, availVirtual;
 
     // OS
-    u32 majorVersion;
-    u32 minorVersion;
-    u32 buildNumber;
-    u32 platformId;
+    u32 majorVersion, minorVersion, buildNumber, platformId;
+
+    // GPU
+    cstr gpuName, gpuVendor, glVersion;
 
     static SystemInfo Init();
 

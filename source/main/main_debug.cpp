@@ -19,8 +19,8 @@ struct GameApi {
     void* library;
 
     void (*Init)();
-    void (*Update)();
-    void (*Shutdown)();
+    void (*EngineUpdate)();
+    void (*EngineShutdown)();
     bool (*ShouldClose)();
     void* (*GetMemory)();
     u64 (*MemorySize)();
@@ -45,7 +45,7 @@ i32 main(i32 argc, cstr argv[]) {
     std::vector<GameApi> oldApis{};
 
     while (!api.ShouldClose) {
-        api.Update();
+        api.EngineUpdate();
         bool forceReload  = api.ForceReload();
         bool forceRestart = api.ForceRestart();
         bool reload       = forceReload || forceRestart;
@@ -68,7 +68,7 @@ i32 main(i32 argc, cstr argv[]) {
                 api          = newApi;
                 api.HotReloaded(memory);
             } else {
-                api.Shutdown();
+                api.EngineShutdown();
                 oldApis.clear();
                 api = newApi;
                 api.Init();
@@ -78,5 +78,5 @@ i32 main(i32 argc, cstr argv[]) {
         }
     }
 
-    api.Shutdown();
+    api.EngineShutdown();
 }

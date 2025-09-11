@@ -10,6 +10,8 @@
 
 typedef const char* cstr;
 
+#define LIST_VAR "\n\t> "
+
 #define INFO(msg, ...)                                                                             \
     SDL_Log(COL_INFO "[INFO]" COL_RESET "  [%s] " msg "\n", __func__, ##__VA_ARGS__)
 #define WARN(msg, ...)                                                                             \
@@ -24,6 +26,26 @@ typedef const char* cstr;
                 ##__VA_ARGS__);                                                                    \
         abort();                                                                                   \
     } while (0);
+
+void SDLInfo() {
+    cstr info = SDL_GetError();
+    INFO("%s", info);
+}
+
+void SDLWarn() {
+    cstr warn = SDL_GetError();
+    WARN("%s", warn);
+}
+
+void SDLError() {
+    cstr err = SDL_GetError();
+    ERR("%s", err);
+}
+
+void SDLFatal() {
+    cstr err = SDL_GetError();
+    FATAL("%s", err);
+}
 
 #define global   static
 #define persist  static

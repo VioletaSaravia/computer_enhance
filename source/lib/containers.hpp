@@ -53,6 +53,13 @@ struct Arena {
     ArenaScope Scope() { return ArenaScope{.arena = this, .mark = this->len}; }
 
     void Clear() { len = 0; }
+
+    // -------- Bytewise iterator support --------
+    u8* begin() { return data; }
+    u8* end() { return data + len; }
+
+    const u8* begin() const { return data; }
+    const u8* end() const { return data + len; }
 };
 
 template <typename T> using Handle = Arena::Handle<T>;

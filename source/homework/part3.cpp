@@ -13,20 +13,16 @@ extern "C" void NOP1x3AllBytes(u64 Count, u8* Data);
 extern "C" void NOP1x9AllBytes(u64 Count, u8* Data);
 
 i32 Part3(i32 argc, cstr argv[]) {
-    // auto info          = OS::SystemInfo::Init();
-    // PlaceholderMetrics = OS::Metrics::Init();
-    // auto seed          = Rand::Init();
-    Init();
+    EngineInit();
 
     i32 count   = SDL_atoi(argc > 1 ? argv[1] : "200000");
     i32 repeats = SDL_atoi(argc > 2 ? argv[2] : "50");
     GenerateHaversineJson(count, "input.json");
 
     {
-        auto ptr = Mem->perm.data;
-        REPETITION_PROFILE("WriteToBytes Arena ptr", 2);
-        for (size_t i = 0; i < Mem->perm.cap; i++) {
-            ptr[i] = u8(0xCD);
+        REPETITION_PROFILE("WriteToBytes Arena iterator", 2);
+        for (auto& i : Mem->perm) {
+            i = u8(0xF0);
         }
         REPETITION_BANDWIDTH(Mem->perm.cap);
         REPETITION_END();
@@ -171,26 +167,26 @@ i32 Part3(i32 argc, cstr argv[]) {
     {
         auto scope = Mem->perm.Scope();
 
-        Array<u8> file;
         REPETITION_PROFILE("ReadEntireFile", repeats);
         {
-            auto scope2 = Mem->perm.Scope(); // careful
-            file        = ReadEntireFile("input.json");
+            auto      scope2 = Mem->perm.Scope();
+            Array<u8> file   = ReadEntireFile("input.json");
 
             REPETITION_BANDWIDTH(file.cap);
         }
         REPETITION_END();
 
-        Array<HaversinePair> parsed;
+        Array<u8> file = ReadEntireFile("input.json");
         REPETITION_PROFILE("ParseHaversineJson", 5);
         {
-            auto scope2 = Mem->perm.Scope(); // careful
-            parsed      = ParseHaversineJson(file, count);
+            auto scope2 = Mem->perm.Scope();
+            auto parsed = ParseHaversineJson(file, count);
 
             REPETITION_BANDWIDTH(file.cap);
         }
         REPETITION_END();
 
+        auto parsed = ParseHaversineJson(file, count);
         REPETITION_PROFILE("SumHaversines", 10);
         {
             f64 sum = SumHaversines(parsed);

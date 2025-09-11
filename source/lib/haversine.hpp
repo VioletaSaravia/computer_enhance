@@ -89,7 +89,7 @@ typedef struct {
     f64  value;
 } JsonKeyValue;
 
-Array<HaversinePair> ParseHaversineJson(Array<u8>& bytes, int expected_count = 1024) {
+Array<HaversinePair> ParseHaversineJson(const Array<u8>& bytes, int expected_count = 1024) {
     PROFILE_FUNCTION();
     PROFILE_ADD_BANDWIDTH(bytes.cap);
     auto result = Array<HaversinePair>::New(expected_count);

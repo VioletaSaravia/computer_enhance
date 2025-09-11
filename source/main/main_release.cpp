@@ -9,7 +9,7 @@
 
 i32 main(i32 argc, cstr argv[]) {
     Part3(argc, argv);
-    // Init();
-    // while (!ShouldClose()) Update();
-    // Shutdown();
+    // EngineInit();
+    // while (!ShouldClose()) EngineUpdate();
+    // EngineShutdown();
 }
