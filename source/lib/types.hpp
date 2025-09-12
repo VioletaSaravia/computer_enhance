@@ -438,13 +438,3 @@ template <typename T> constexpr auto GB(T val) {
 template <typename T> constexpr auto TB(T val) {
     return GB(val) * 1024;
 }
-
-struct ISingleton {
-    ISingleton()  = default;
-    ~ISingleton() = default;
-
-    ISingleton(const ISingleton&)            = delete;
-    ISingleton(ISingleton&&)                 = delete;
-    ISingleton& operator=(const ISingleton&) = delete;
-    ISingleton& operator=(ISingleton&&)      = delete;
-};

@@ -6,7 +6,7 @@
             "command": "cl.exe",
             "args": [
                 "/Zi",
-                "/O1",
+                // "/O1",
                 "/I${workspaceFolder}\\source",
                 "/I${workspaceFolder}\\vendor",
                 "/std:c++20",

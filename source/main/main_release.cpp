@@ -8,8 +8,8 @@
 #include "homework/part3.cpp"
 
 i32 main(i32 argc, cstr argv[]) {
-    Part3(argc, argv);
-    // EngineInit();
-    // while (!ShouldClose()) EngineUpdate();
-    // EngineShutdown();
+    // Part3(argc, argv);
+    EngineInit();
+    while (!ShouldClose()) EngineUpdate();
+    EngineShutdown();
 }

@@ -4,12 +4,12 @@
 
 namespace Game {
 
-struct Settings {
+typedef struct Settings {
     cstr name;
     v2   resolution;
     v2   glVersion;
     u64  permMemory, tempMemory;
-};
+} Settings;
 
 Settings Setup();
 

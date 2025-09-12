@@ -3,10 +3,10 @@
 #include "core/opengl.hpp"
 
 #include "lib/containers.hpp"
-#include "lib/os.hpp"
 #include "lib/game.hpp"
+#include "lib/os.hpp"
 
-struct WindowCtx {
+typedef struct WindowCtx {
     SDL_Window* window;
     v2          initialResolution;
 
@@ -52,7 +52,7 @@ struct WindowCtx {
         SDL_GL_DestroyContext(gl);
         SDL_DestroyWindow(window);
     }
-};
+} WindowCtx;
 
 void ImguiInit(const WindowCtx& w) {
     f32 mainScale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());

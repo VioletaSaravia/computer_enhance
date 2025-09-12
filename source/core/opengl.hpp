@@ -23,13 +23,13 @@ void Begin() {
 void End() {
 }
 
-struct DrawCmd {
+typedef struct DrawCmd {
     u32 shader, texture;
-};
+} DrawCmd;
 
-struct GraphicsCtx {
+typedef struct GraphicsCtx {
     v4      clearColor;
     DrawCmd drawQueue[64];
-};
+} GraphicsCtx;
 
 } // namespace GL

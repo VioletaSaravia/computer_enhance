@@ -4,119 +4,19 @@
 #include "core/window.hpp"
 
 #include "lib/containers.hpp"
+#include "lib/game.hpp"
+#include "lib/input.hpp"
 #include "lib/os.hpp"
 
-#include "game.hpp"
+typedef struct Editor {
+    bool                 show;
+    StackArray<f32*, 32> tweakables;
+    StackArray<v2*, 32>  views;
 
-enum class InputState : u8 {
-    None         = 0,
-    JustPressed  = 0b0001,
-    Pressed      = 0b0010,
-    Down         = 0b0011,
-    Released     = 0b0100,
-    JustReleased = 0b1000,
-    Up           = 0b1100,
-};
+    void ShowAndUpdate();
+} Editor;
 
-enum class Key : u32 {
-    Q         = SDL_SCANCODE_Q,
-    W         = SDL_SCANCODE_W,
-    E         = SDL_SCANCODE_E,
-    R         = SDL_SCANCODE_R,
-    T         = SDL_SCANCODE_T,
-    Y         = SDL_SCANCODE_Y,
-    U         = SDL_SCANCODE_U,
-    I         = SDL_SCANCODE_I,
-    O         = SDL_SCANCODE_O,
-    P         = SDL_SCANCODE_P,
-    A         = SDL_SCANCODE_A,
-    S         = SDL_SCANCODE_S,
-    D         = SDL_SCANCODE_D,
-    F         = SDL_SCANCODE_F,
-    G         = SDL_SCANCODE_G,
-    H         = SDL_SCANCODE_H,
-    J         = SDL_SCANCODE_J,
-    K         = SDL_SCANCODE_K,
-    L         = SDL_SCANCODE_L,
-    Semicolon = SDL_SCANCODE_SEMICOLON,
-    Z         = SDL_SCANCODE_Z,
-    X         = SDL_SCANCODE_X,
-    C         = SDL_SCANCODE_C,
-    V         = SDL_SCANCODE_V,
-    B         = SDL_SCANCODE_B,
-    N         = SDL_SCANCODE_N,
-    M         = SDL_SCANCODE_M,
-    Space     = SDL_SCANCODE_SPACE,
-    Escape    = SDL_SCANCODE_ESCAPE,
-    Enter     = SDL_SCANCODE_RETURN,
-    Up        = SDL_SCANCODE_UP,
-    Down      = SDL_SCANCODE_DOWN,
-    Left      = SDL_SCANCODE_LEFT,
-    Right     = SDL_SCANCODE_RIGHT,
-    LCtrl     = SDL_SCANCODE_LCTRL,
-    LShift    = SDL_SCANCODE_LSHIFT,
-    LAlt      = SDL_SCANCODE_LALT,
-    LGui      = SDL_SCANCODE_LGUI,
-    RCtrl     = SDL_SCANCODE_RCTRL,
-    RShift    = SDL_SCANCODE_RSHIFT,
-    RAlt      = SDL_SCANCODE_RALT,
-    RGui      = SDL_SCANCODE_RGUI,
-    COUNT     = SDL_SCANCODE_COUNT
-};
-
-enum class Pad : i8 {
-    None  = SDL_GAMEPAD_BUTTON_INVALID,
-    South = SDL_GAMEPAD_BUTTON_SOUTH,
-    North = SDL_GAMEPAD_BUTTON_NORTH,
-    West  = SDL_GAMEPAD_BUTTON_WEST,
-    East  = SDL_GAMEPAD_BUTTON_EAST,
-    L1    = SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,
-    L3    = SDL_GAMEPAD_BUTTON_LEFT_STICK,
-    R1    = SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,
-    R3    = SDL_GAMEPAD_BUTTON_RIGHT_STICK,
-    Start = SDL_GAMEPAD_BUTTON_START,
-    Back  = SDL_GAMEPAD_BUTTON_BACK,
-    Pad   = SDL_GAMEPAD_BUTTON_TOUCHPAD,
-    Up    = SDL_GAMEPAD_BUTTON_DPAD_UP,
-    Down  = SDL_GAMEPAD_BUTTON_DPAD_DOWN,
-    Left  = SDL_GAMEPAD_BUTTON_DPAD_LEFT,
-    Right = SDL_GAMEPAD_BUTTON_DPAD_RIGHT,
-    COUNT = SDL_GAMEPAD_BUTTON_COUNT
-};
-
-enum class Controllers { Controller0, Controller1, Controller2, Controller3, COUNT };
-
-struct Editor {
-    bool                 hide;
-    StackArray<f32*, 64> tweakables;
-
-    void ShowAndUpdate() {
-        ImGui::Begin("Parameters", &hide);
-        if (ImGui::Button("Close")) hide = true;
-
-        for (auto i : tweakables) {
-            ImGui::DragFloat("var", i);
-        }
-
-        ImGui::End();
-    }
-};
-
-struct InputInfo {
-    InputState state;
-    f32        time; // held time or released time
-};
-
-struct InputCtx {
-    u32       randomSeed;
-    f32       delta;
-    f64       prevTime;
-    bool      quit;
-    InputInfo keys[(u32)(Key::COUNT)];
-    InputInfo pads[(u32)(Controllers::COUNT)][(u32)(Pad::COUNT)];
-};
-
-struct GameMemory {
+typedef struct GameMemory {
     OS::SystemInfo  info;
     OS::Metrics     metrics;
     InputCtx        input;
@@ -126,9 +26,54 @@ struct GameMemory {
     Arena           temp;
     WindowCtx       window;
     Editor          editor;
-};
+} GameMemory;
 
 global GameMemory* Mem;
+
+InputState GetKey(Key key) {
+    return Mem->input.keys[(u32)(key)].state;
+}
+
+InputState GetButton(Button button) {
+    return Mem->input.buttons[(u32)(button)].state;
+}
+
+v2 GetMousePos() {
+    return Mem->input.mousePos;
+}
+
+v2 GetMouseDelta() {
+    return Mem->input.mouseDelta;
+}
+
+v2 GetWheel() {
+    return Mem->input.wheel;
+}
+
+InputState GetPad(Pad pad, u32 controller = 0) {
+    return Mem->input.pads[controller][(u32)(pad)].state;
+}
+
+i16 GetAxis(PadAxis axis, u32 controller = 0) {
+    return Mem->input.axes[controller][(u32)(axis)];
+}
+
+void Editor::ShowAndUpdate() {
+    if (GetKey(Key::F1) == InputState::JustPressed) Mem->editor.show ^= true;
+    if (!show) return;
+
+    ImGui::Begin("Debug", &show);
+
+    for (auto i : tweakables) {
+        ImGui::InputFloat("var", i);
+    }
+
+    for (auto i : views) {
+        ImGui::Text("v2: %g, %g", i->x, i->y);
+    }
+
+    ImGui::End();
+}
 
 Arena& Arena::Perm() {
     return Mem->perm;
@@ -141,6 +86,24 @@ Arena& Arena::Temp() {
 f32 Tweak(f32* val, f32 from, f32 to) {
     Mem->editor.tweakables.Push(val);
     return *val;
+}
+
+v2 View(v2* val, v2 from, v2 to) {
+    Mem->editor.views.Push(val);
+    return *val;
+}
+
+f32 Delta() {
+    return Mem->input.delta;
+}
+
+u32 GamepadFromJoystick(u32 id) {
+    for (auto i : Mem->input.padIDs) {
+        if (id == i) return i;
+    }
+
+    ERR("Gamepad with joystick id %d not found", id);
+    return 0;
 }
 
 EXPORT void EngineInit() {
@@ -172,24 +135,43 @@ EXPORT void EngineInit() {
     Game::Init(Mem->data);
 }
 
-f32 Delta() {
-    return Mem->input.delta;
-}
-
 void UpdateEvents() {
-    // TODO Double check logic
     for (auto& i : Mem->input.keys) {
         switch (i.state) {
         case InputState::None:
         case InputState::JustReleased: {
             i.state = InputState::Released;
-            i.time  = 0.0f;
+            i.time  = Delta();
             break;
         }
 
         case InputState::JustPressed: {
             i.state = InputState::Pressed;
-            i.time  = 0.0f;
+            i.time  = Delta();
+            break;
+        }
+
+        case InputState::Pressed:
+        case InputState::Released: {
+            i.time += Delta();
+            break;
+        }
+        default: break;
+        }
+    }
+
+    for (auto& i : Mem->input.buttons) {
+        switch (i.state) {
+        case InputState::None:
+        case InputState::JustReleased: {
+            i.state = InputState::Released;
+            i.time  = Delta();
+            break;
+        }
+
+        case InputState::JustPressed: {
+            i.state = InputState::Pressed;
+            i.time  = Delta();
             break;
         }
 
@@ -208,13 +190,13 @@ void UpdateEvents() {
             case InputState::None:
             case InputState::JustReleased: {
                 i.state = InputState::Released;
-                i.time  = 0.0f;
+                i.time  = Delta();
                 break;
             }
 
             case InputState::JustPressed: {
                 i.state = InputState::Pressed;
-                i.time = 0.0f;
+                i.time  = Delta();
                 break;
             }
 
@@ -228,7 +210,7 @@ void UpdateEvents() {
         }
     }
 
-    SDL_Event event;
+    SDL_Event event = {};
     while (SDL_PollEvent(&event)) {
         ImGui_ImplSDL3_ProcessEvent(&event);
 
@@ -245,15 +227,42 @@ void UpdateEvents() {
         }
 
         case SDL_EVENT_GAMEPAD_ADDED: {
+            for (auto& i : Mem->input.padIDs) {
+                if (i == 0) {
+                    i = event.gdevice.which;
+                    goto added;
+                }
+            }
+
+            WARN("Gamepad limit reached");
+            break;
+
+        added:
+            INFO("Gamepad added");
             break;
         }
 
         case SDL_EVENT_GAMEPAD_REMOVED: {
+            for (auto& i : Mem->input.padIDs) {
+                if (i == event.gdevice.which) {
+                    i = 0;
+                    goto removed;
+                }
+            }
+
+            WARN("Couldn't remove gamepad");
+            break;
+
+        removed:
+            INFO("Gamepad removed");
             break;
         }
 
         case SDL_EVENT_KEY_DOWN: {
-            Mem->input.keys[event.key.scancode].state = InputState::JustPressed; // WRONG ?
+            auto cur = &Mem->input.keys[event.key.scancode].state;
+            *cur     = *cur == InputState::JustPressed || *cur == InputState::Pressed
+                           ? InputState::Pressed
+                           : InputState::JustPressed;
             break;
         }
 
@@ -263,12 +272,47 @@ void UpdateEvents() {
         }
 
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-            Mem->input.pads[0][event.gbutton.button].state = InputState::JustPressed;
+            u32  id  = GamepadFromJoystick(event.gbutton.which);
+            auto cur = &Mem->input.pads[id][event.gbutton.button].state;
+            *cur     = *cur == InputState::JustPressed || *cur == InputState::Pressed
+                           ? InputState::Pressed
+                           : InputState::JustPressed;
             break;
         }
 
         case SDL_EVENT_GAMEPAD_BUTTON_UP: {
-            Mem->input.pads[0][event.gbutton.button].state = InputState::JustReleased;
+            u32 id = GamepadFromJoystick(event.gbutton.which);
+            Mem->input.pads[id][event.gbutton.button].state = InputState::JustReleased;
+            break;
+        }
+
+        case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+            u32 id                                = GamepadFromJoystick(event.gaxis.which);
+            Mem->input.axes[id][event.gaxis.axis] = event.gaxis.value;
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_MOTION: {
+            Mem->input.mousePos   = v2{event.motion.x, event.motion.y};
+            Mem->input.mouseDelta = v2{event.motion.xrel, event.motion.yrel};
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+            auto cur = &Mem->input.buttons[event.button.button].state;
+            *cur     = *cur == InputState::JustPressed || *cur == InputState::Pressed
+                           ? InputState::Pressed
+                           : InputState::JustPressed;
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
+            Mem->input.buttons[event.button.button].state = InputState::JustReleased;
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_WHEEL: {
+            Mem->input.wheel = v2{event.wheel.x, event.wheel.y};
             break;
         }
 
