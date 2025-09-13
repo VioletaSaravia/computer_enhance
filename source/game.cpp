@@ -1,7 +1,7 @@
 #include "lib/engine.hpp"
 
 struct Game::Data {
-    f32 someNum = Tweak(&someNum, 0.0f, 64.0f); // MACRO
+    f32 someNum;
 };
 
 Game::Settings Game::Setup() {
@@ -15,15 +15,21 @@ Game::Settings Game::Setup() {
 }
 
 void Game::Init(Game::Data* data) {
-    *data = {};
-    View(&Mem->input.mousePos, {}, {640, 480});
-    View(&Mem->input.mouseDelta, {-100, -100}, {100, 100});
-    View(&Mem->input.wheel, {-1, -1}, {1, 1});
+    *data = {
+        .someNum = TWEAK(data->someNum, 0, 1),
+    };
+    
 }
 
 void Game::Update(Game::Data* data) {
     auto k = GetKey(Key::F);
     if (k == InputState::JustPressed) {
-        INFO("BLABERS");
+        INFO("JustPressed");
     };
+    if (k == InputState::JustReleased) {
+        INFO("JustReleased");
+    }
+    if (IsDoubleClicked(Key::F)) {
+        INFO("Double Click");
+    }
 }

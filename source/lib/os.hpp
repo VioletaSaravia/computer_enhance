@@ -62,17 +62,6 @@ struct SystemInfo {
 
     static SystemInfo Init();
 
-    // TODO move to engine
-    void Check(const AppInfo& info) const {
-        if ((info.permMemorySize + info.tempMemorySize) > this->availPhys) {
-            FATAL("Insufficient available RAM: app needs at least %llu MBs, got %llu MBs",
-                  (info.permMemorySize + info.tempMemorySize) / (1024 * 1024),
-                  availPhys / (1024 * 1024));
-        };
-
-        return;
-    }
-
     void Print() const {
         INFO("System Information");
         SDL_Log("\t> Platform: \t\t\tWindows %s\n", processorArchitecture);
@@ -86,6 +75,18 @@ struct SystemInfo {
         SDL_Log("\t> Available Physical Memory: \t%llu MB\n", availPhys / (1024 * 1024));
         SDL_Log("\t> Total Virtual Memory: \t%llu MB\n", totalVirtual / (1024 * 1024));
         SDL_Log("\t> Available Virtual Memory: \t%llu MB\n", availVirtual / (1024 * 1024));
+    }
+
+    void GetAndPrintGPUInfo() {
+        gpuName   = (cstr)glGetString(GL_RENDERER);
+        gpuVendor = (cstr)glGetString(GL_VENDOR);
+        glVersion = (cstr)glGetString(GL_VERSION);
+
+        INFO("GPU Information" 
+            LIST_VAR "Name: \t\t\t%s" 
+            LIST_VAR "Vendor: \t\t\t%s" 
+            LIST_VAR "OpenGL version: \t\t%s", 
+            gpuName, gpuVendor, glVersion);
     }
 };
 

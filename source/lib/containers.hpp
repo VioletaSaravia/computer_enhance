@@ -1,6 +1,5 @@
 #pragma once
 
-// #include "lib/os.hpp"
 #include "lib/types.hpp"
 
 struct Arena {
@@ -10,24 +9,24 @@ struct Arena {
 
     Arena(u64 size) : data{(u8*)SDL_malloc(size)}, gen{1}, len{0}, cap{size} {}
 
-    static Arena& Perm();
-    static Arena& Temp();
+    static Arena* Perm();
+    static Arena* Temp();
 
     template <typename T> struct Handle {
         u32 gen, idx;
 
         Handle() : gen{0}, idx{0} {}
-        Handle(T* ptr) : gen{Arena::Perm().gen}, idx{u32((u8*)ptr - (u8*)Arena::Perm().data)} {}
+        Handle(T* ptr) : gen{Arena::Perm()->gen}, idx{u32((u8*)ptr - (u8*)Arena::Perm()->data)} {}
 
-        T*       ToPtr() { return (T*)(&Arena::Perm().data[this->idx]); }
-        const T* ToConstPtr() const { return (const T*)(&Arena::Perm().data[this->idx]); }
+        T*       ToPtr() { return (T*)(&Arena::Perm()->data[this->idx]); }
+        const T* ToConstPtr() const { return (const T*)(&Arena::Perm()->data[this->idx]); }
         T&       operator*() { return *ToPtr(); }
         T*       operator->() { return ToPtr(); }
 
         // TODO MultiHandle<T> ?
         T& operator[](size_t index) { return *(ToPtr() + index); }
         operator T*() { return ToPtr(); }
-        operator const T*() const { return (const T*)(&Arena::Perm().data[this->idx]); }
+        operator const T*() const { return (const T*)(&Arena::Perm()->data[this->idx]); }
 
         bool NotNull() const { return bool(this); }
     };
@@ -76,7 +75,7 @@ template <typename T> struct Array {
     Array<T>() { WARN("Empty array initialized"); }
     Array<T>(Handle<T> _data, u64 _len, u64 _cap) : data{_data}, len{_len}, cap{_cap} {}
 
-    static Array<T> New(u64 size) { return Array<T>(Arena::Perm().Alloc<T>(size), 0, size); }
+    static Array<T> New(u64 size) { return Array<T>(Arena::Perm()->Alloc<T>(size), 0, size); }
 
     void Push(T& element) {
         if (len >= cap) {
@@ -112,7 +111,7 @@ template <typename T> struct Array {
 
     void Resize() {
         INFO("Resizing array");
-        next  = Arena::Perm().Alloc<Array<T>>();
+        next  = Arena::Perm()->Alloc<Array<T>>();
         *next = Array<T>::New(cap);
     }
 

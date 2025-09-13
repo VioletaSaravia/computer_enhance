@@ -8,12 +8,55 @@
 #include "lib/input.hpp"
 #include "lib/os.hpp"
 
-typedef struct Editor {
-    bool                 show;
-    StackArray<f32*, 32> tweakables;
-    StackArray<v2*, 32>  views;
+template <typename T> struct NamedPtr {
+    cstr name;
+    T*   ptr;
+};
 
-    void ShowAndUpdate();
+enum class TweakableType {
+    None,
+    f32,
+    v2,
+    v3,
+};
+
+struct Tweakable {
+    TweakableType t;
+    cstr          name;
+    union {
+        f32* float32;
+        v2*  vec2;
+        v3*  vec3;
+    };
+};
+
+typedef struct Editor {
+    bool                      show;
+    StackArray<Tweakable, 32> tweakables;
+
+    void ShowAndUpdate() {
+        if (GetKey(Key::F1) == InputState::JustPressed) show ^= true;
+        if (!show) return;
+
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings;
+
+        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(200, 1080), ImGuiCond_Always);
+
+        ImGui::Begin("Debug", &show, flags);
+
+        for (auto i : tweakables) {
+            switch (i.t) {
+            case TweakableType::f32: ImGui::InputFloat(i.name, i.float32); break;
+            case TweakableType::v2: ImGui::InputFloat2(i.name, (f32*)(i.vec2)); break;
+            case TweakableType::v3: ImGui::InputFloat3(i.name, (f32*)(i.vec3)); break;
+            default: break;
+            }
+        }
+
+        ImGui::End();
+    }
 } Editor;
 
 typedef struct GameMemory {
@@ -30,66 +73,40 @@ typedef struct GameMemory {
 
 global GameMemory* Mem;
 
-InputState GetKey(Key key) {
-    return Mem->input.keys[(u32)(key)].state;
+InputCtx* Input() {
+    return &Mem->input;
 }
 
-InputState GetButton(Button button) {
-    return Mem->input.buttons[(u32)(button)].state;
+Arena* Arena::Perm() {
+    return &Mem->perm;
 }
 
-v2 GetMousePos() {
-    return Mem->input.mousePos;
+Arena* Arena::Temp() {
+    return &Mem->temp;
 }
 
-v2 GetMouseDelta() {
-    return Mem->input.mouseDelta;
-}
+#define TWEAK(var, from, to) Tweak(&var, #var, from, to)
+f32 Tweak(f32* val, cstr name, f32 from, f32 to) {
+    cstr strippedName = StripName(name);
 
-v2 GetWheel() {
-    return Mem->input.wheel;
-}
-
-InputState GetPad(Pad pad, u32 controller = 0) {
-    return Mem->input.pads[controller][(u32)(pad)].state;
-}
-
-i16 GetAxis(PadAxis axis, u32 controller = 0) {
-    return Mem->input.axes[controller][(u32)(axis)];
-}
-
-void Editor::ShowAndUpdate() {
-    if (GetKey(Key::F1) == InputState::JustPressed) Mem->editor.show ^= true;
-    if (!show) return;
-
-    ImGui::Begin("Debug", &show);
-
-    for (auto i : tweakables) {
-        ImGui::InputFloat("var", i);
-    }
-
-    for (auto i : views) {
-        ImGui::Text("v2: %g, %g", i->x, i->y);
-    }
-
-    ImGui::End();
-}
-
-Arena& Arena::Perm() {
-    return Mem->perm;
-}
-
-Arena& Arena::Temp() {
-    return Mem->temp;
-}
-
-f32 Tweak(f32* val, f32 from, f32 to) {
-    Mem->editor.tweakables.Push(val);
+    Tweakable store = {.t = TweakableType::f32, .name = strippedName, .float32 = val};
+    Mem->editor.tweakables.Push(store);
     return *val;
 }
 
-v2 View(v2* val, v2 from, v2 to) {
-    Mem->editor.views.Push(val);
+v2 Tweak(v2* val, cstr name, v2 from, v2 to) {
+    cstr strippedName = StripName(name);
+
+    Tweakable store = {.t = TweakableType::v2, .name = strippedName, .vec2 = val};
+    Mem->editor.tweakables.Push(store);
+    return *val;
+}
+
+v3 Tweak(v3* val, cstr name, v3 from, v3 to) {
+    cstr strippedName = StripName(name);
+
+    Tweakable store = {.t = TweakableType::v3, .name = strippedName, .vec3 = val};
+    Mem->editor.tweakables.Push(store);
     return *val;
 }
 
@@ -116,7 +133,8 @@ EXPORT void EngineInit() {
         .metrics = OS::Metrics::Init(),
         .input =
             {
-                .randomSeed = Rand::Init(),
+                .randomSeed       = Rand::Init(),
+                .doubleClickSpeed = 0.5f,
             },
         .data   = (Game::Data*)((u8*)(Mem) + sizeof(GameMemory)),
         .gfx    = {.clearColor = {0.4, 0, 0.6, 1}},
@@ -124,13 +142,9 @@ EXPORT void EngineInit() {
         .temp   = Arena(settings.tempMemory),
         .window = WindowCtx::Init(settings),
     };
-    ImguiInit(Mem->window);
 
-    INFO("GPU Information" LIST_VAR "Name: \t\t\t%s" LIST_VAR "Vendor: \t\t\t%s" LIST_VAR
-         "OpenGL version: \t\t%s",
-         glGetString(GL_RENDERER),
-         glGetString(GL_VENDOR),
-         glGetString(GL_VERSION));
+    ImguiInit(Mem->window);
+    Mem->info.GetAndPrintGPUInfo();
 
     Game::Init(Mem->data);
 }
@@ -140,14 +154,18 @@ void UpdateEvents() {
         switch (i.state) {
         case InputState::None:
         case InputState::JustReleased: {
-            i.state = InputState::Released;
-            i.time  = Delta();
+            i = {
+                .state = InputState::Released,
+                .time  = Delta(),
+            };
             break;
         }
 
         case InputState::JustPressed: {
-            i.state = InputState::Pressed;
-            i.time  = Delta();
+            i = {
+                .state = InputState::Pressed,
+                .time  = Delta(),
+            };
             break;
         }
 
@@ -164,14 +182,18 @@ void UpdateEvents() {
         switch (i.state) {
         case InputState::None:
         case InputState::JustReleased: {
-            i.state = InputState::Released;
-            i.time  = Delta();
+            i = {
+                .state = InputState::Released,
+                .time  = Delta(),
+            };
             break;
         }
 
         case InputState::JustPressed: {
-            i.state = InputState::Pressed;
-            i.time  = Delta();
+            i = {
+                .state = InputState::Pressed,
+                .time  = Delta(),
+            };
             break;
         }
 
@@ -189,14 +211,18 @@ void UpdateEvents() {
             switch (i.state) {
             case InputState::None:
             case InputState::JustReleased: {
-                i.state = InputState::Released;
-                i.time  = Delta();
+                i = {
+                    .state = InputState::Released,
+                    .time  = Delta(),
+                };
                 break;
             }
 
             case InputState::JustPressed: {
-                i.state = InputState::Pressed;
-                i.time  = Delta();
+                i = {
+                    .state = InputState::Pressed,
+                    .time  = Delta(),
+                };
                 break;
             }
 

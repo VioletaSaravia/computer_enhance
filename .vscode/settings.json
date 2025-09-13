@@ -70,6 +70,15 @@
         "xutility": "cpp",
         "glad.c": "cpp",
         "list": "cpp",
-        "xhash": "cpp"
+        "xhash": "cpp",
+        "functional": "cpp",
+        "*.rh": "cpp",
+        "game.h": "c",
+        "containers.h": "c",
+        "engine.h": "c",
+        "haversine.h": "c",
+        "struct_parser.h": "c",
+        "gen_array.h": "c",
+        "parser.h": "c"
     }
 }

@@ -64,8 +64,21 @@ using i64 = int64_t;
 using f32 = float_t;
 using f64 = double_t;
 
-// template <typename T>
-// concept Float = std::floating_point<T>;
+// Strip name from variable in macro.
+// @example StripName("Mem->foo.bar") == "bar"
+// @example StripName("Mem->foo") == "foo"
+cstr StripName(cstr var) {
+    cstr strippedName = var;
+    u64  len          = strlen(var);
+    for (int i = len - 1; i >= 0; i--) {
+        if (var[i] == '>' || var[i] == '.') {
+            strippedName = &var[i + 1];
+            break;
+        }
+    }
+
+    return strippedName;
+}
 
 template <typename T> constexpr bool IsZero(T value, T epsilon = 0.001f) {
     return fabs(value) < epsilon;
