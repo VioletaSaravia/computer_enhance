@@ -1,27 +1,23 @@
-#include "lib/engine.hpp"
+#include "core/engine.hpp"
 
-struct Game::Data {
+struct Data {
     f32 someNum;
 };
 
-Game::Settings Game::Setup() {
-    return Game::Settings{
+Settings Setup() {
+    return Settings{
         .name       = "Test",
-        .resolution = {640, 480},
+        .resolution = {1280, 720},
         .glVersion  = {4, 6},
-        .permMemory = MB(512),
-        .tempMemory = MB(32),
+        .memory     = sizeof(Data),
     };
 }
 
-void Game::Init(Game::Data* data) {
-    *data = {
-        .someNum = TWEAK(data->someNum, 0, 1),
-    };
-    
+void Init(Data* data) {
+    *data = {};
 }
 
-void Game::Update(Game::Data* data) {
+void Update(Data* data) {
     auto k = GetKey(Key::F);
     if (k == InputState::JustPressed) {
         INFO("JustPressed");

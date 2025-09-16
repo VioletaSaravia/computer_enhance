@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lib/types.hpp"
+#include "core/types.hpp"
 
 #define EXPORT
 
@@ -8,14 +8,14 @@ struct AppInfo {
     u64 permMemorySize, tempMemorySize;
 };
 
-namespace OS {
-
 struct Metrics {
     bool  Initialized;
     void* ProcessHandle;
 
-    static Metrics Init();
-    u64            ReadPageFaultCount();
+    static Metrics  New();
+    static Metrics& Get();
+
+    u64 ReadPageFaultCount();
 };
 
 u64 ReadCPUTimer(void);
@@ -82,12 +82,10 @@ struct SystemInfo {
         gpuVendor = (cstr)glGetString(GL_VENDOR);
         glVersion = (cstr)glGetString(GL_VERSION);
 
-        INFO("GPU Information" 
-            LIST_VAR "Name: \t\t\t%s" 
-            LIST_VAR "Vendor: \t\t\t%s" 
-            LIST_VAR "OpenGL version: \t\t%s", 
-            gpuName, gpuVendor, glVersion);
+        INFO("GPU Information" LIST_VAR "Name: \t\t\t%s" LIST_VAR "Vendor: \t\t\t%s" LIST_VAR
+             "OpenGL version: \t\t%s",
+             gpuName,
+             gpuVendor,
+             glVersion);
     }
 };
-
-}; // namespace OS

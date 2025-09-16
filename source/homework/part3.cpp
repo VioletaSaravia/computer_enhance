@@ -1,6 +1,7 @@
 #define ENABLE_PROFILER 1
 
-#include "lib/engine.hpp"
+#include "core/engine.hpp"
+
 #include "lib/haversine.hpp"
 
 extern "C" void MOVAllBytesASM(u64 Count, u8* Data);
@@ -14,28 +15,11 @@ extern "C" void NOP1x9AllBytes(u64 Count, u8* Data);
 
 i32 Part3(i32 argc, cstr argv[]) {
     EngineInit();
+    EngineShutdown(); // Close window
 
     i32 count   = SDL_atoi(argc > 1 ? argv[1] : "200000");
     i32 repeats = SDL_atoi(argc > 2 ? argv[2] : "50");
     GenerateHaversineJson(count, "input.json");
-
-    {
-        REPETITION_PROFILE("WriteToBytes Arena iterator", 2);
-        for (auto& i : Mem->perm) {
-            i = u8(0xF0);
-        }
-        REPETITION_BANDWIDTH(Mem->perm.cap);
-        REPETITION_END();
-    }
-
-    {
-        REPETITION_PROFILE("WriteToBytes Mem->perm", 2);
-        for (size_t i = 0; i < Mem->perm.cap; i++) {
-            Mem->perm.data[i] = u8(0xCD);
-        }
-        REPETITION_BANDWIDTH(Mem->perm.cap);
-        REPETITION_END();
-    }
 
     {
         u8* testData = (u8*)SDL_malloc(count);

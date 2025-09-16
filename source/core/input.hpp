@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lib/types.hpp"
+#include "core/types.hpp"
 
 typedef enum class InputState : u8 {
     None         = 0,
@@ -140,50 +140,50 @@ typedef struct InputCtx {
     i16       axes[(u32)(Gamepad::COUNT)][(u32)(PadAxis::COUNT)];
 } InputCtx;
 
-InputCtx* Input();
+InputCtx& Input();
 
 InputState GetKey(Key key) {
-    return Input()->keys[(u32)(key)].state;
+    return Input().keys[(u32)(key)].state;
 }
 
-bool IsDoubleClicked(Key key, f32 speed = Input()->doubleClickSpeed) {
-    auto info = Input()->keys[(u32)(key)];
+bool IsDoubleClicked(Key key, f32 speed = Input().doubleClickSpeed) {
+    auto info = Input().keys[(u32)(key)];
     return info.state == InputState::JustPressed && info.time <= speed;
 }
 
-bool IsDoubleClicked(Button btn, f32 speed = Input()->doubleClickSpeed) {
-    auto info = Input()->buttons[(u32)(btn)];
+bool IsDoubleClicked(Button btn, f32 speed = Input().doubleClickSpeed) {
+    auto info = Input().buttons[(u32)(btn)];
     return info.state == InputState::JustPressed && info.time <= speed;
 }
 
 bool IsDoubleClicked(Pad     pad,
                      Gamepad gamepad = Gamepad::Pad0,
-                     f32     speed   = Input()->doubleClickSpeed) {
+                     f32     speed   = Input().doubleClickSpeed) {
 
-    auto info = Input()->pads[(u32)(gamepad)][(u32)(pad)];
+    auto info = Input().pads[(u32)(gamepad)][(u32)(pad)];
     return info.state == InputState::JustPressed && info.time <= speed;
 }
 
 InputState GetButton(Button button) {
-    return Input()->buttons[(u32)(button)].state;
+    return Input().buttons[(u32)(button)].state;
 }
 
 v2 GetMousePos() {
-    return Input()->mousePos;
+    return Input().mousePos;
 }
 
 v2 GetMouseDelta() {
-    return Input()->mouseDelta;
+    return Input().mouseDelta;
 }
 
 v2 GetWheel() {
-    return Input()->wheel;
+    return Input().wheel;
 }
 
 InputState GetPad(Pad pad, u32 controller = 0) {
-    return Input()->pads[controller][(u32)(pad)].state;
+    return Input().pads[controller][(u32)(pad)].state;
 }
 
 i16 GetAxis(PadAxis axis, u32 controller = 0) {
-    return Input()->axes[controller][(u32)(axis)];
+    return Input().axes[controller][(u32)(axis)];
 }

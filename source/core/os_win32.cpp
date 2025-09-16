@@ -1,6 +1,5 @@
 #include "core/opengl.hpp"
-
-#include "lib/os.hpp"
+#include "core/os.hpp"
 
 #define WIN32_LEAN_AND_MEAN
 #define _CRT_SECURE_NO_WARNINGS 1
@@ -23,9 +22,7 @@
 #undef EXPORT
 #define EXPORT extern "C" __declspec(dllexport)
 
-namespace OS {
-
-Metrics Metrics::Init() {
+Metrics Metrics::New() {
     return {.Initialized   = true,
             .ProcessHandle = OpenProcess(
                 PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId())};
@@ -84,7 +81,7 @@ SystemInfo SystemInfo::Init() {
     case PROCESSOR_ARCHITECTURE_ARM64: result.processorArchitecture = "ARM64"; break;
     }
 
-    result.cpuFreq = f64(OS::EstimateCPUTimerFreq()) / 1000.0 / 1000.0 / 1000.0;
+    result.cpuFreq = f64(EstimateCPUTimerFreq()) / 1000.0 / 1000.0 / 1000.0;
 
     // Memory
     memInfo.dwLength = sizeof(memInfo);
@@ -113,5 +110,3 @@ SystemInfo SystemInfo::Init() {
 
     return result;
 }
-
-}; // namespace OS

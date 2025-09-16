@@ -1,8 +1,12 @@
 #pragma once
 
+#ifdef PROFILER_STANDALONE
+#include "profiler_standalone.hpp"
+#endif
+
+#include "core/os.hpp"
+#include "core/types.hpp"
 #include "lib/containers.hpp"
-#include "lib/os.hpp"
-#include "lib/types.hpp"
 
 struct Block {
     cstr label, file;
@@ -177,8 +181,6 @@ static f64 ToGb(f64 bytes) {
     return bytes / 1024.0 / 1024.0 / 1024.0;
 }
 
-global OS::Metrics PlaceholderMetrics;
-
 struct RepProfiler {
     cstr name;
 
@@ -202,7 +204,7 @@ struct RepProfiler {
         current = {
             .time       = SDL_GetPerformanceCounter(),
             .bytes      = 0,
-            .pageFaults = PlaceholderMetrics.ReadPageFaultCount(),
+            .pageFaults = Metrics::Get().ReadPageFaultCount(),
         };
     }
 
@@ -210,7 +212,7 @@ struct RepProfiler {
 
     void EndRep() {
         current.time       = SDL_GetPerformanceCounter() - current.time;
-        current.pageFaults = PlaceholderMetrics.ReadPageFaultCount() - current.pageFaults;
+        current.pageFaults = Metrics::Get().ReadPageFaultCount() - current.pageFaults;
 
         if (current.time < min.time || min.time == 0) {
             min = current;

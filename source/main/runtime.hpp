@@ -1,4 +1,6 @@
-#include "lib/os.hpp"
+#pragma once
+
+#include "core/os.hpp"
 
 extern "C" {
 // Forces use of the discrete NVIDIA GPU

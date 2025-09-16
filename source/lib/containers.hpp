@@ -1,37 +1,19 @@
 #pragma once
 
-#include "lib/types.hpp"
+#include "core/types.hpp"
 
 struct Arena {
     u8* data;
     u32 gen;
     u64 len, cap;
 
-    Arena(u64 size) : data{(u8*)SDL_malloc(size)}, gen{1}, len{0}, cap{size} {}
+    Arena(u64 size) : data{(u8*)SDL_malloc(size)}, gen{1}, len{0}, cap{size} {
+        for (size_t i = 0; i < cap; i++) {
+            data[i] = 0xCD;
+        }
+    }
 
-    static Arena* Perm();
-    static Arena* Temp();
-
-    template <typename T> struct Handle {
-        u32 gen, idx;
-
-        Handle() : gen{0}, idx{0} {}
-        Handle(T* ptr) : gen{Arena::Perm()->gen}, idx{u32((u8*)ptr - (u8*)Arena::Perm()->data)} {}
-
-        T*       ToPtr() { return (T*)(&Arena::Perm()->data[this->idx]); }
-        const T* ToConstPtr() const { return (const T*)(&Arena::Perm()->data[this->idx]); }
-        T&       operator*() { return *ToPtr(); }
-        T*       operator->() { return ToPtr(); }
-
-        // TODO MultiHandle<T> ?
-        T& operator[](size_t index) { return *(ToPtr() + index); }
-        operator T*() { return ToPtr(); }
-        operator const T*() const { return (const T*)(&Arena::Perm()->data[this->idx]); }
-
-        bool NotNull() const { return bool(this); }
-    };
-
-    template <typename T> Handle<T> Alloc(u64 count = 1) {
+    template <typename T = u8> T* Alloc(u64 count = 1) {
         if (len + sizeof(T) * count > cap) {
             WARN("Permanent memory full");
             return nullptr;
@@ -39,7 +21,7 @@ struct Arena {
 
         T* result = (T*)&data[len];
         len += sizeof(T) * count;
-        return Handle(result);
+        return result;
     }
 
     struct ArenaScope {
@@ -50,42 +32,30 @@ struct Arena {
     };
 
     ArenaScope Scope() { return ArenaScope{.arena = this, .mark = this->len}; }
-
-    void Clear() { len = 0; }
-
-    // -------- Bytewise iterator support --------
-    u8* begin() { return data; }
-    u8* end() { return data + len; }
-
-    const u8* begin() const { return data; }
-    const u8* end() const { return data + len; }
 };
 
-template <typename T> using Handle = Arena::Handle<T>;
+Arena& Perm();
+Arena& Temp();
 
 template <typename T> struct Array {
     inline static T Empty = {};
 
-    Handle<T> data;
-    u64       len;
-    u64       cap;
-
-    Handle<Array<T>> next;
+    T*  data;
+    u64 len;
+    u64 cap;
 
     Array<T>() { WARN("Empty array initialized"); }
-    Array<T>(Handle<T> _data, u64 _len, u64 _cap) : data{_data}, len{_len}, cap{_cap} {}
+    Array<T>(T* _data, u64 _len, u64 _cap) : data{_data}, len{_len}, cap{_cap} {}
 
-    static Array<T> New(u64 size) { return Array<T>(Arena::Perm()->Alloc<T>(size), 0, size); }
+    ~Array<T>() = default;
+
+    static Array<T> New(u64 size, Arena& arena = Perm()) {
+        return Array<T>(arena.Alloc<T>(size), 0, size);
+    }
 
     void Push(T& element) {
         if (len >= cap) {
-            if (next.NotNull()) {
-                next->Push(element);
-                return;
-            }
-
-            Resize();
-            Push(element);
+            WARN("Array length exceeded");
             return;
         }
 
@@ -95,13 +65,6 @@ template <typename T> struct Array {
 
     void Push(T const& element) {
         if (len >= cap) {
-            if (next.NotNull()) {
-                next->Push(element);
-                return;
-            }
-
-            Resize();
-            Push(element);
             return;
         }
 
@@ -109,19 +72,9 @@ template <typename T> struct Array {
         len++;
     }
 
-    void Resize() {
-        INFO("Resizing array");
-        next  = Arena::Perm()->Alloc<Array<T>>();
-        *next = Array<T>::New(cap);
-    }
-
     T& Pop() {
-        if (next && next->len > 0) {
-            return next->Pop();
-        }
-
         if (len == 0) {
-            SDL_Log("[WARNING] Array length exceeded\n");
+            WARN("Array empty");
             return Array<T>::Empty;
         }
 
@@ -130,12 +83,8 @@ template <typename T> struct Array {
     }
 
     T& Last() {
-        if (next && next->len > 0) {
-            return next->Last();
-        }
-
         if (len == 0) {
-            SDL_Log("[WARNING] Array is null\n");
+            WARN("Array empty");
             return Array<T>::Empty;
         }
 
@@ -144,7 +93,8 @@ template <typename T> struct Array {
 
     T& operator[](u64 id) {
         if (id >= cap) {
-            return next ? (*next)[id - cap] : Array<T>::Empty;
+            WARN("Array length exceeded");
+            return Array<T>::Empty;
         }
         return data[id];
     }
@@ -157,13 +107,109 @@ template <typename T> struct Array {
     const T* end() const { return data + len; }
 };
 
-// TODO fails because const strings are not in arena :/
 struct String : Array<u8> {
-    cstr Cstr() { return (cstr)(this->data.ToConstPtr()); }
-    // String(cstr str) : Array<u8>{.data = (u8*)(str), .len = strlen(str), .cap = len} {}
+    operator cstr() { return (cstr)(this->data); }
+    String(cstr str) : Array<u8>((u8*)(str), strlen(str), len) {}
 };
 
-// TODO empty case in [0] or...?
+template <typename T> struct DynArray : Array<T> {
+    Arena*       arena;
+    DynArray<T>* next;
+
+    DynArray(Arena& _arena = Perm()) : Array<T>{}, arena{&_arena}, next{nullptr} {
+        WARN("Empty array initialized");
+    }
+
+    DynArray(T* _data, u64 _len, u64 _cap, Arena& _arena)
+        : Array<T>{_data, _len, _cap, _arena, nullptr}, arena{&_arena}, next{nullptr} {}
+
+    ~DynArray<T>()                                   = default;
+    DynArray<T>& operator=(DynArray<T> const& array) = default;
+
+    static DynArray<T> New(u64 size, Arena& arena = Perm()) {
+        return DynArray<T>(arena.Alloc<T>(size), 0, size, arena);
+    }
+
+    void Push(T& element) {
+        if (this->len >= this->cap) {
+            if (next) {
+                next->Push(element);
+                return;
+            }
+
+            Resize();
+            Push(element);
+            return;
+        }
+
+        this->data[this->len] = element;
+        this->len++;
+    }
+
+    void Push(T const& element) {
+        if (this->len >= this->cap) {
+            if (next) {
+                next->Push(element);
+                return;
+            }
+
+            Resize();
+            Push(element);
+            return;
+        }
+
+        this->data[this->len] = element;
+        this->len++;
+    }
+
+    void Resize() {
+        INFO("Resizing array");
+        next  = arena->Alloc<DynArray<T>>();
+        *next = DynArray<T>::New(this->cap, *arena);
+    }
+
+    T& Pop() {
+        if (next && next->len > 0) {
+            return next->Pop();
+        }
+
+        if (this->len == 0) {
+            SDL_Log("[WARNING] DynArray length exceeded\n");
+            return DynArray<T>::Empty;
+        }
+
+        this->len -= 1;
+        return this->data[this->len];
+    }
+
+    T& Last() {
+        if (next && next->len > 0) {
+            return next->Last();
+        }
+
+        if (this->len == 0) {
+            SDL_Log("[WARNING] DynArray is null\n");
+            return DynArray<T>::Empty;
+        }
+
+        return this->data[this->len - 1];
+    }
+
+    T& operator[](u64 id) {
+        if (id >= this->cap) {
+            return next ? (*next)[id - this->cap] : DynArray<T>::Empty;
+        }
+        return this->data[id];
+    }
+
+    // -------- Iterator support --------
+    T* begin() { return this->data; }
+    T* end() { return this->data + this->len; }
+
+    const T* begin() const { return this->data; }
+    const T* end() const { return this->data + this->len; }
+};
+
 template <typename T, unsigned int N> struct StackArray {
     T   data[N];
     u64 len;
@@ -171,7 +217,7 @@ template <typename T, unsigned int N> struct StackArray {
 
     void Push(T& element) {
         if (len >= N) {
-            SDL_Log("[WARNING] StackArray length exceeded\n");
+            WARN("StackArray length exceeded");
             return;
         }
 
@@ -181,7 +227,7 @@ template <typename T, unsigned int N> struct StackArray {
 
     T& Pop() {
         if (len == 0) {
-            SDL_Log("[WARNING] StackArray is empty\n");
+            WARN("StackArray is empty");
             return data[0];
         }
 
@@ -191,7 +237,7 @@ template <typename T, unsigned int N> struct StackArray {
 
     T& Last() {
         if (len == 0) {
-            SDL_Log("[WARNING] StackArray is empty\n");
+            WARN("StackArray is empty");
             return data[0];
         }
 
@@ -200,7 +246,7 @@ template <typename T, unsigned int N> struct StackArray {
 
     T& operator[](u64 id) {
         if (id >= cap) {
-            SDL_Log("[WARNING] StackArray is empty\n");
+            WARN("StackArray is empty");
             return data[0];
         }
 

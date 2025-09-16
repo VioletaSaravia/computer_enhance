@@ -1,9 +1,11 @@
 #pragma once
 
-#include "lib/containers.hpp"
-#include "lib/io.hpp"
-
 #include <stdio.h>
+
+#include "core/io.hpp"
+
+#include "lib/containers.hpp"
+
 
 typedef struct {
     f64 x0, y0, x1, y1;

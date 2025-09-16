@@ -1,8 +1,8 @@
 #pragma once
 
-#include "lib/profiler.hpp"
-
 #include <stdio.h>
+
+#include "lib/profiler.hpp"
 
 Array<u8> ReadEntireFile(cstr path) {
     // THE BEST WAY TO AVOID ERRORS IS NOT TO HAVE THEM
@@ -23,7 +23,7 @@ Array<u8> ReadEntireFile(cstr path) {
     result.len = result.cap;
 
     rewind(f);
-    u64 rd = fread((void*)(result.data.ToConstPtr()), 1, (u64)result.cap, f);
+    u64 rd = fread((void*)(result.data), 1, (u64)result.cap, f);
     if (rd != (u64)result.cap) return {};
 
     return result;

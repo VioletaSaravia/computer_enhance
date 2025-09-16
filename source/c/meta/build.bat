@@ -1,1 +1,0 @@
-cl.exe /std:c11 /I..\ /I..\..\vendor meta.c x64\\SDL3.lib /link /LIBPATH:..\..\vendor\\SDL3\\lib

@@ -1,10 +1,10 @@
 #pragma once
 
 #include "core/opengl.hpp"
+#include "core/game.hpp"
+#include "core/os.hpp"
 
 #include "lib/containers.hpp"
-#include "lib/game.hpp"
-#include "lib/os.hpp"
 
 typedef struct WindowCtx {
     SDL_Window* window;
@@ -14,7 +14,7 @@ typedef struct WindowCtx {
     i32           glMajorVersion;
     i32           glMinorVersion;
 
-    static WindowCtx Init(Game::Settings settings) {
+    static WindowCtx Init(Settings settings) {
         WindowCtx result = {.initialResolution = settings.resolution,
                             .glMajorVersion    = (i32)(settings.glVersion.x),
                             .glMinorVersion    = (i32)(settings.glVersion.y)};

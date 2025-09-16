@@ -1,113 +1,40 @@
 #pragma once
 
+#include "core/game.hpp"
+#include "core/input.hpp"
 #include "core/opengl.hpp"
+#include "core/os.hpp"
 #include "core/window.hpp"
 
 #include "lib/containers.hpp"
-#include "lib/game.hpp"
-#include "lib/input.hpp"
-#include "lib/os.hpp"
 
-template <typename T> struct NamedPtr {
-    cstr name;
-    T*   ptr;
+struct Memory {
+    Arena       perm;
+    Arena       temp;
+    SystemInfo  info;
+    Metrics     metrics;
+    InputCtx    input;
+    GraphicsCtx gfx;
+    WindowCtx   window;
+    Data*       data;
 };
 
-enum class TweakableType {
-    None,
-    f32,
-    v2,
-    v3,
-};
+global Memory* Mem;
 
-struct Tweakable {
-    TweakableType t;
-    cstr          name;
-    union {
-        f32* float32;
-        v2*  vec2;
-        v3*  vec3;
-    };
-};
-
-typedef struct Editor {
-    bool                      show;
-    StackArray<Tweakable, 32> tweakables;
-
-    void ShowAndUpdate() {
-        if (GetKey(Key::F1) == InputState::JustPressed) show ^= true;
-        if (!show) return;
-
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings;
-
-        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(200, 1080), ImGuiCond_Always);
-
-        ImGui::Begin("Debug", &show, flags);
-
-        for (auto i : tweakables) {
-            switch (i.t) {
-            case TweakableType::f32: ImGui::InputFloat(i.name, i.float32); break;
-            case TweakableType::v2: ImGui::InputFloat2(i.name, (f32*)(i.vec2)); break;
-            case TweakableType::v3: ImGui::InputFloat3(i.name, (f32*)(i.vec3)); break;
-            default: break;
-            }
-        }
-
-        ImGui::End();
-    }
-} Editor;
-
-typedef struct GameMemory {
-    OS::SystemInfo  info;
-    OS::Metrics     metrics;
-    InputCtx        input;
-    Game::Data*     data;
-    GL::GraphicsCtx gfx;
-    Arena           perm;
-    Arena           temp;
-    WindowCtx       window;
-    Editor          editor;
-} GameMemory;
-
-global GameMemory* Mem;
-
-InputCtx* Input() {
-    return &Mem->input;
+Metrics& Metrics::Get() {
+    return Mem->metrics;
 }
 
-Arena* Arena::Perm() {
-    return &Mem->perm;
+InputCtx& Input() {
+    return Mem->input;
 }
 
-Arena* Arena::Temp() {
-    return &Mem->temp;
+Arena& Perm() {
+    return Mem->perm;
 }
 
-#define TWEAK(var, from, to) Tweak(&var, #var, from, to)
-f32 Tweak(f32* val, cstr name, f32 from, f32 to) {
-    cstr strippedName = StripName(name);
-
-    Tweakable store = {.t = TweakableType::f32, .name = strippedName, .float32 = val};
-    Mem->editor.tweakables.Push(store);
-    return *val;
-}
-
-v2 Tweak(v2* val, cstr name, v2 from, v2 to) {
-    cstr strippedName = StripName(name);
-
-    Tweakable store = {.t = TweakableType::v2, .name = strippedName, .vec2 = val};
-    Mem->editor.tweakables.Push(store);
-    return *val;
-}
-
-v3 Tweak(v3* val, cstr name, v3 from, v3 to) {
-    cstr strippedName = StripName(name);
-
-    Tweakable store = {.t = TweakableType::v3, .name = strippedName, .vec3 = val};
-    Mem->editor.tweakables.Push(store);
-    return *val;
+Arena& Temp() {
+    return Mem->temp;
 }
 
 f32 Delta() {
@@ -123,54 +50,66 @@ u32 GamepadFromJoystick(u32 id) {
     return 0;
 }
 
+#ifndef PERM_ARENA_SIZE
+#define PERM_ARENA_SIZE MB(512)
+#endif
+
+#ifndef TEMP_ARENA_SIZE
+#define TEMP_ARENA_SIZE MB(32)
+#endif
+
 EXPORT void EngineInit() {
-    auto settings = Game::Setup();
-    Mem = (GameMemory*)SDL_malloc(sizeof(GameMemory) + settings.permMemory + settings.tempMemory);
+    auto  settings = Setup();
+    Arena perm(PERM_ARENA_SIZE);
+    Arena temp(TEMP_ARENA_SIZE);
+
+    Mem = perm.Alloc<Memory>();
     if (!Mem) SDLFatal();
 
     *Mem = {
-        .info    = OS::SystemInfo::Init(),
-        .metrics = OS::Metrics::Init(),
+        .perm    = perm,
+        .temp    = temp,
+        .info    = SystemInfo::Init(),
+        .metrics = Metrics::New(),
         .input =
             {
                 .randomSeed       = Rand::Init(),
                 .doubleClickSpeed = 0.5f,
             },
-        .data   = (Game::Data*)((u8*)(Mem) + sizeof(GameMemory)),
         .gfx    = {.clearColor = {0.4, 0, 0.6, 1}},
-        .perm   = Arena(settings.permMemory),
-        .temp   = Arena(settings.tempMemory),
         .window = WindowCtx::Init(settings),
+        .data   = (Data*)perm.Alloc(settings.memory),
     };
 
     ImguiInit(Mem->window);
     Mem->info.GetAndPrintGPUInfo();
-
-    Game::Init(Mem->data);
+    Init(Mem->data);
 }
 
 void UpdateEvents() {
+    using enum InputState;
+
     for (auto& i : Mem->input.keys) {
         switch (i.state) {
-        case InputState::None:
-        case InputState::JustReleased: {
+        case None:
+        case JustReleased: {
             i = {
-                .state = InputState::Released,
+                .state = Released,
                 .time  = Delta(),
             };
             break;
         }
 
-        case InputState::JustPressed: {
+        case JustPressed: {
             i = {
-                .state = InputState::Pressed,
+                .state = Pressed,
                 .time  = Delta(),
             };
             break;
         }
 
-        case InputState::Pressed:
-        case InputState::Released: {
+        case Pressed:
+        case Released: {
             i.time += Delta();
             break;
         }
@@ -180,25 +119,25 @@ void UpdateEvents() {
 
     for (auto& i : Mem->input.buttons) {
         switch (i.state) {
-        case InputState::None:
-        case InputState::JustReleased: {
+        case None:
+        case JustReleased: {
             i = {
-                .state = InputState::Released,
+                .state = Released,
                 .time  = Delta(),
             };
             break;
         }
 
-        case InputState::JustPressed: {
+        case JustPressed: {
             i = {
-                .state = InputState::Pressed,
+                .state = Pressed,
                 .time  = Delta(),
             };
             break;
         }
 
-        case InputState::Pressed:
-        case InputState::Released: {
+        case Pressed:
+        case Released: {
             i.time += Delta();
             break;
         }
@@ -209,25 +148,25 @@ void UpdateEvents() {
     for (auto& pad : Mem->input.pads) {
         for (auto& i : pad) {
             switch (i.state) {
-            case InputState::None:
-            case InputState::JustReleased: {
+            case None:
+            case JustReleased: {
                 i = {
-                    .state = InputState::Released,
+                    .state = Released,
                     .time  = Delta(),
                 };
                 break;
             }
 
-            case InputState::JustPressed: {
+            case JustPressed: {
                 i = {
-                    .state = InputState::Pressed,
+                    .state = Pressed,
                     .time  = Delta(),
                 };
                 break;
             }
 
-            case InputState::Pressed:
-            case InputState::Released: {
+            case Pressed:
+            case Released: {
                 i.time += Delta();
                 break;
             }
@@ -286,29 +225,25 @@ void UpdateEvents() {
 
         case SDL_EVENT_KEY_DOWN: {
             auto cur = &Mem->input.keys[event.key.scancode].state;
-            *cur     = *cur == InputState::JustPressed || *cur == InputState::Pressed
-                           ? InputState::Pressed
-                           : InputState::JustPressed;
+            *cur     = *cur == JustPressed || *cur == Pressed ? Pressed : JustPressed;
             break;
         }
 
         case SDL_EVENT_KEY_UP: {
-            Mem->input.keys[event.key.scancode].state = InputState::JustReleased;
+            Mem->input.keys[event.key.scancode].state = JustReleased;
             break;
         }
 
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
             u32  id  = GamepadFromJoystick(event.gbutton.which);
             auto cur = &Mem->input.pads[id][event.gbutton.button].state;
-            *cur     = *cur == InputState::JustPressed || *cur == InputState::Pressed
-                           ? InputState::Pressed
-                           : InputState::JustPressed;
+            *cur     = *cur == Down || *cur == Pressed ? Pressed : JustPressed;
             break;
         }
 
         case SDL_EVENT_GAMEPAD_BUTTON_UP: {
             u32 id = GamepadFromJoystick(event.gbutton.which);
-            Mem->input.pads[id][event.gbutton.button].state = InputState::JustReleased;
+            Mem->input.pads[id][event.gbutton.button].state = JustReleased;
             break;
         }
 
@@ -326,14 +261,12 @@ void UpdateEvents() {
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN: {
             auto cur = &Mem->input.buttons[event.button.button].state;
-            *cur     = *cur == InputState::JustPressed || *cur == InputState::Pressed
-                           ? InputState::Pressed
-                           : InputState::JustPressed;
+            *cur     = *cur == JustPressed || *cur == Pressed ? Pressed : JustPressed;
             break;
         }
 
         case SDL_EVENT_MOUSE_BUTTON_UP: {
-            Mem->input.buttons[event.button.button].state = InputState::JustReleased;
+            Mem->input.buttons[event.button.button].state = JustReleased;
             break;
         }
 
@@ -355,7 +288,7 @@ EXPORT void EngineUpdate() {
         return;
     }
 
-    Game::Update(Mem->data);
+    Update(Mem->data);
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
@@ -363,8 +296,6 @@ EXPORT void EngineUpdate() {
 
     static bool show_demo_window = true;
     if (show_demo_window) ImGui::ShowDemoWindow(&show_demo_window);
-
-    Mem->editor.ShowAndUpdate();
 
     ImGui::Render();
 
@@ -399,11 +330,11 @@ EXPORT void* GetMemory() {
 }
 
 EXPORT u64 MemorySize() {
-    return sizeof(GameMemory) + Mem->perm.cap + Mem->temp.cap;
+    return sizeof(Memory) + Mem->perm.cap + Mem->temp.cap;
 }
 
 EXPORT void HotReloaded(void* memory) {
-    Mem = (GameMemory*)memory;
+    Mem = (Memory*)memory;
 }
 
 EXPORT bool ForceReload() {

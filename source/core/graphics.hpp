@@ -1,7 +1,8 @@
 #pragma once
 
+#include "core/types.hpp"
+
 #include "lib/containers.hpp"
-#include "lib/types.hpp"
 
 struct Color {
     u8 r, g, b, a;

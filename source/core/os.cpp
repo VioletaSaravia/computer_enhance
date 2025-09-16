@@ -1,9 +1,9 @@
 #if defined(_WIN32)
-#include "lib/os_win32.c"
+#include "core/os_win32.cpp"
 #elif defined(__linux__)
-#include "lib/os_linux.c"
+#include "core/os_linux.cpp"
 #elif defined(__EMSCRIPTEN__)
-#include "lib/os_wasm.c"
+#include "core/os_wasm.cpp"
 #else
 #error "Unsupported platform"
 #endif

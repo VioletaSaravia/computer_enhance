@@ -6,8 +6,8 @@
 #include "lib/haversine.hpp"
 
 i32 Part2(i32 argc, cstr argv[]) {
-    OS::SystemInfo::Init();
-    OS::Metrics::Init();
+    SystemInfo::Init();
+    Metrics::Init();
     Rand::Init();
 
     Profiler::New("Haversine Sum");
